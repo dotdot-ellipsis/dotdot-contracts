@@ -16,7 +16,7 @@ contract EllipsisToken2 is IERC20 {
     mapping(address => mapping(address => uint256)) public override allowance;
 
     IERC20 public immutable EPX;
-    ITokenLocker public immutable tokenLocker;
+    ITokenLocker public immutable epsLocker;
 
     IEllipsisProxy public immutable proxy;
 
@@ -27,12 +27,12 @@ contract EllipsisToken2 is IERC20 {
     constructor(
         IERC20 _EPX,
         IEllipsisProxy _proxy,
-        ITokenLocker _tokenLocker
+        ITokenLocker _epsLocker
     ) {
         EPX = _EPX;
         proxy = _proxy;
-        tokenLocker = _tokenLocker;
-        MAX_LOCK_WEEKS = _tokenLocker.MAX_LOCK_WEEKS();
+        epsLocker = _epsLocker;
+        MAX_LOCK_WEEKS = _epsLocker.MAX_LOCK_WEEKS();
         lastLockWeek = block.timestamp / WEEK;
         emit Transfer(address(0), msg.sender, 0);
     }
@@ -99,7 +99,7 @@ contract EllipsisToken2 is IERC20 {
 
     function extendLock() public returns (bool) {
         if (lastLockWeek < block.timestamp / WEEK) {
-            uint256[2][] memory locks = tokenLocker.getActiveUserLocks(address(this));
+            uint256[2][] memory locks = epsLocker.getActiveUserLocks(address(this));
             for (uint i = 0; i < locks.length; i++) {
                 (uint256 week, uint256 amount) = (locks[i][0], locks[i][1]);
                 if (week < MAX_LOCK_WEEKS) proxy.extendLock(amount, week);
