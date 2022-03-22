@@ -1,10 +1,10 @@
 pragma solidity 0.8.12;
 
-import "./interfaces/IFeeDistributor.sol";
 import "./interfaces/IERC20.sol";
-import "./interfaces/ILpStaker.sol";
-import "./interfaces/IIncentiveVoting.sol";
-import "./interfaces/ITokenLocker.sol";
+import "./interfaces/ellipsis/IFeeDistributor.sol";
+import "./interfaces/ellipsis/ILpStaker.sol";
+import "./interfaces/ellipsis/IIncentiveVoting.sol";
+import "./interfaces/ellipsis/ITokenLocker.sol";
 
 
 contract EllipsisProxy {

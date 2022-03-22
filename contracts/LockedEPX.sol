@@ -1,8 +1,8 @@
 pragma solidity 0.8.12;
 
 import "./interfaces/IERC20.sol";
-import "./interfaces/IEpsProxy.sol";
-import "./interfaces/ITokenLocker.sol";
+import "./interfaces/dotdot/IEpsProxy.sol";
+import "./interfaces/ellipsis/ITokenLocker.sol";
 
 
 contract EllipsisToken2 is IERC20 {
