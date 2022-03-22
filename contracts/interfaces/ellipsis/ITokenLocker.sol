@@ -5,6 +5,9 @@ interface ITokenLocker {
 
     function MAX_LOCK_WEEKS() external view returns (uint256);
     function getWeek() external view returns (uint256);
+    function userWeight(address _user) external view returns (uint256);
+    function totalWeight() external view returns (uint256);
+    function startTime() external view returns (uint256);
 
     /**
         @notice Get data on a user's active token locks

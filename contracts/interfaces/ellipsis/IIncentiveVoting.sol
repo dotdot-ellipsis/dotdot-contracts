@@ -2,6 +2,9 @@ pragma solidity 0.8.12;
 
 interface IIncentiveVoting {
 
+    function startTime() external view returns (uint256);
+    function availableVotes(address _user) external view returns (uint256);
+
     /**
         @notice Allocate votes toward LP tokens to receive emissions in the following week
         @param _tokens List of addresses of LP tokens to vote for
