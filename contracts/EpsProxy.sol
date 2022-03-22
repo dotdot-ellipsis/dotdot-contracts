@@ -47,6 +47,7 @@ contract EllipsisProxy {
     // TokenLocker
 
     function lock(uint256 _amount) external returns (bool) {
+        // TODO guard
         tokenLocker.lock(address(this), _amount, MAX_LOCK_WEEKS);
         return true;
     }
@@ -58,19 +59,20 @@ contract EllipsisProxy {
 
     // EllipsisLpStaking
 
-    function deposit(address _token, uint256 _amount) external returns (bool) {
-        lpStaker.deposit(address(this), _token, _amount, true);
-        return true;
+    function deposit(address _token, uint256 _amount) external returns (uint256) {
+        // TODO approval, guard
+        return lpStaker.deposit(address(this), _token, _amount, true);
     }
 
-    function withdraw(address _receiver, address _token, uint256 _amount) external returns (bool) {
-        lpStaker.withdraw(_receiver, _token, _amount, true);
-        return true;
+    function withdraw(address _receiver, address _token, uint256 _amount) external returns (uint256) {
+        // TODO guard
+        return lpStaker.withdraw(_receiver, _token, _amount, true);
     }
 
-    function claimEmissions(address[] calldata _tokens) external returns (bool) {
-        lpStaker.claim(address(this), _tokens);
-        return true;
+    function claimEmissions(address _token) external returns (uint256) {
+        address[] memory tokens = new address[](1);
+        tokens[0] = _token;
+        return lpStaker.claim(address(this), tokens);
     }
 
     // FeeDistributor
