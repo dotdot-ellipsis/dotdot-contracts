@@ -1,12 +1,11 @@
 pragma solidity 0.8.12;
 
-import "./dependencies/Ownable.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/dotdot/IEpsProxy.sol";
 import "./interfaces/ellipsis/ITokenLocker.sol";
 import "./interfaces/ellipsis/IIncentiveVoting.sol";
 
-contract IncentiveVoting is Ownable {
+contract IncentiveVoting {
 
     struct Vote {
         address token;
