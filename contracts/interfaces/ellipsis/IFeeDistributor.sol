@@ -3,6 +3,8 @@ pragma solidity 0.8.12;
 
 interface IFeeDistributor {
 
+    function startTime() external view returns (uint256);
+
     /**
         @notice Set the claim receiver address for the caller
         @param _receiver Claim receiver address
