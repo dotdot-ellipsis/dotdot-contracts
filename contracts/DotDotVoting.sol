@@ -5,7 +5,7 @@ import "./interfaces/dotdot/IEpsProxy.sol";
 import "./interfaces/ellipsis/ITokenLocker.sol";
 import "./interfaces/ellipsis/IIncentiveVoting.sol";
 
-contract IncentiveVoting {
+contract DotDotVoting {
 
     struct Vote {
         address token;
@@ -67,6 +67,11 @@ contract IncentiveVoting {
     function getWeek() public view returns (uint256) {
         if (startTime >= block.timestamp) return 0;
         return (block.timestamp - startTime) / WEEK;
+    }
+
+
+    function weeklyVotes(address _user, address _token, uint256 _week) external view returns (uint256, uint256) {
+        return (userTokenVotes[_user][_token][_week], tokenVotes[_token][_week]);
     }
 
     /**
