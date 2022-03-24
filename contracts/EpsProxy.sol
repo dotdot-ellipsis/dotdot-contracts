@@ -61,12 +61,14 @@ contract EllipsisProxy {
 
     function deposit(address _token, uint256 _amount) external returns (uint256) {
         // TODO approval, guard
-        return lpStaker.deposit(address(this), _token, _amount, true);
+        return lpStaker.deposit(_token, _amount, true);
     }
 
     function withdraw(address _receiver, address _token, uint256 _amount) external returns (uint256) {
         // TODO guard
-        return lpStaker.withdraw(_receiver, _token, _amount, true);
+        uint256 reward = lpStaker.withdraw(_token, _amount, true);
+        IERC20(_token).transfer(_receiver, _amount);
+        return reward;
     }
 
     function claimEmissions(address _token) external returns (uint256) {

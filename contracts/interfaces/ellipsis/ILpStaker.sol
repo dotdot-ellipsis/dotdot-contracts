@@ -27,21 +27,19 @@ interface IEllipsisLpStaking {
 
     /**
         @notice Deposit LP tokens into the contract
-        @param _receiver Address to deposit for.
         @param _token LP token address to deposit.
         @param _amount Amount of tokens to deposit.
         @param _claimRewards If true, also claim pending rewards on the token.
      */
-    function deposit(address _receiver, address _token, uint256 _amount, bool _claimRewards) external returns (uint256);
+    function deposit(address _token, uint256 _amount, bool _claimRewards) external returns (uint256);
 
     /**
         @notice Withdraw LP tokens from the contract
-        @param _receiver Address to send the withdrawn tokens to.
         @param _token LP token address to withdraw.
         @param _amount Amount of tokens to withdraw.
         @param _claimRewards If true, also claim pending rewards on the token.
      */
-    function withdraw(address _receiver, address _token, uint256 _amount, bool _claimRewards) external returns (uint256);
+    function withdraw(address _token, uint256 _amount, bool _claimRewards) external returns (uint256);
 
     function claim(address _user, address[] calldata _tokens) external returns (uint256);
 
