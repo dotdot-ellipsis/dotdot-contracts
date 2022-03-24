@@ -5,6 +5,7 @@ import "./interfaces/IERC20.sol";
 import "./interfaces/ellipsis/ILpStaker.sol";
 import "./interfaces/dotdot/IEpsProxy.sol";
 import "./interfaces/dotdot/IDepositToken.sol";
+import "./interfaces/ellipsis/IRewardsToken.sol";
 
 
 contract LpDepositor {
@@ -13,6 +14,10 @@ contract LpDepositor {
     struct Amounts {
         uint256 epx;
         uint256 ddd;
+    }
+    struct ExtraReward {
+        address token;
+        uint256 amount;
     }
 
     IERC20 public immutable EPX;
@@ -34,7 +39,14 @@ contract LpDepositor {
     // pool -> DDD deposit token
     mapping(address => address) public depositTokens;
 
-
+    // pool -> third party rewards
+    mapping(address => address[]) public extraRewards;
+    // pool -> third party reward integrals
+    mapping(address => uint256[]) extraRewardIntegral;
+    // user -> pool -> third party reward integrals
+    mapping(address => mapping(address => uint256[])) public extraRewardIntegralFor;
+    // user -> pool -> unclaimed reward balances
+    mapping(address => mapping(address => uint256[])) public unclaimedExtraRewards;
 
     constructor(
         IERC20 _EPX,
@@ -72,6 +84,25 @@ contract LpDepositor {
                 pending[i].ddd += balance * (integral.ddd - integralFor.ddd) / 1e18;
             }
         }
+    }
+
+    function claimableExtraRewards(address user, address pool) external view returns (ExtraReward[] memory) {
+        uint256 length = extraRewards[pool].length;
+        uint256 total = totalBalances[pool];
+        uint256 balance = userBalances[user][pool];
+        ExtraReward[] memory rewards = new ExtraReward[](length);
+        for (uint i = 0; i < length; i++) {
+            address token = extraRewards[pool][i];
+            uint256 amount = unclaimedExtraRewards[user][pool][i];
+            if (balance > 0) {
+                uint256 earned = IRewardsToken(token).earned(address(proxy), token);
+                uint256 integral = extraRewardIntegral[pool][i] + 1e18 * earned;
+                uint256 integralFor = extraRewardIntegralFor[user][pool][i];
+                amount += balance * (integral - integralFor) / 1e18;
+            }
+            rewards[i] = ExtraReward({token: token, amount: amount});
+        }
+        return rewards;
     }
 
     function deposit(address _user, address _token, uint256 _amount) external {
@@ -127,6 +158,28 @@ contract LpDepositor {
 
     }
 
+    function claimExtraRewards(address user, address pool) external {
+        uint256 total = totalBalances[pool];
+        uint256 balance = userBalances[user][pool];
+        if (total > 0) _updateExtraIntegrals(user, pool, balance, total);
+        uint256 length = extraRewards[pool].length;
+        for (uint i = 0; i < length; i++) {
+            uint256 amount = unclaimedExtraRewards[user][pool][i];
+            if (amount > 0) {
+                unclaimedExtraRewards[user][pool][i] = 0;
+                IERC20(extraRewards[pool][i]).safeTransfer(user, amount);
+            }
+        }
+    }
+
+    function updatePoolExtraRewards(address pool) external {
+        uint256 count = IRewardsToken(pool).rewardCount();
+        address[] storage rewards = extraRewards[pool];
+        for (uint256 i = rewards.length; i < count; i ++) {
+            rewards.push(IRewardsToken(pool).rewardTokens(i));
+        }
+    }
+
     function transferDeposit(address _token, address _from, address _to, uint256 _amount) external returns (bool) {
         require(msg.sender == depositTokens[_token], "Unauthorized caller");
         require(_amount > 0, "Cannot transfer zero");
@@ -178,13 +231,40 @@ contract LpDepositor {
             integral.ddd += 1e18 * (reward * 100 / 888) / total;
             rewardIntegral[pool] = integral;
         }
-        if (user != address(0)) {
-            Amounts memory integralFor = rewardIntegralFor[user][pool];
-            if (integralFor.epx < integral.epx) {
-                Amounts storage claims = unclaimedRewards[user][pool];
-                claims.epx += balance * (integral.epx - integralFor.epx) / 1e18;
-                claims.ddd += balance * (integral.ddd - integralFor.ddd) / 1e18;
-                rewardIntegralFor[user][pool] = integral;
+        Amounts memory integralFor = rewardIntegralFor[user][pool];
+        if (integralFor.epx < integral.epx) {
+            Amounts storage claims = unclaimedRewards[user][pool];
+            claims.epx += balance * (integral.epx - integralFor.epx) / 1e18;
+            claims.ddd += balance * (integral.ddd - integralFor.ddd) / 1e18;
+            rewardIntegralFor[user][pool] = integral;
+        }
+
+        if (total > 0 && extraRewards[pool].length > 0) _updateExtraIntegrals(user, pool, balance, total);
+    }
+
+    function _updateExtraIntegrals(
+        address user,
+        address pool,
+        uint256 balance,
+        uint256 total
+    ) internal {
+        address[] memory rewards = extraRewards[pool];
+        uint256[] memory balances = new uint256[](rewards.length);
+        for (uint i = 0; i < rewards.length; i++) {
+            balances[i] = IERC20(rewards[i]).balanceOf(address(this));
+        }
+        proxy.getReward(pool, rewards);
+        for (uint i = 0; i < rewards.length; i++) {
+            uint256 delta = IERC20(rewards[i]).balanceOf(address(this)) - balances[i];
+            uint256 integral;
+            if (delta > 0) {
+                integral = extraRewardIntegral[pool][i] + 1e18 * delta / total;
+                extraRewardIntegral[pool][i] = integral;
+            }
+            uint256 integralFor = extraRewardIntegralFor[user][pool][i];
+            if (integralFor < integral) {
+                unclaimedExtraRewards[user][pool][i] += balance * (integral - integralFor) / 1e18;
+                extraRewardIntegralFor[user][pool][i] = integralFor;
             }
         }
     }
