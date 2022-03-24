@@ -10,4 +10,5 @@ interface IEllipsisProxy {
     function vote(address[] calldata _tokens, uint256[] calldata _votes) external returns (bool);
     function createTokenApprovalVote(address _token) external returns (uint256 _voteIndex);
     function voteForTokenApproval(uint256 _voteIndex) external returns (bool);
+    function getReward(address _lpToken, address[] calldata _rewards) external returns (bool);
 }

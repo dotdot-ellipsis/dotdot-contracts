@@ -5,6 +5,7 @@ import "./interfaces/ellipsis/IFeeDistributor.sol";
 import "./interfaces/ellipsis/ILpStaker.sol";
 import "./interfaces/ellipsis/IIncentiveVoting.sol";
 import "./interfaces/ellipsis/ITokenLocker.sol";
+import "./interfaces/ellipsis/IRewardsToken.sol";
 
 
 contract EllipsisProxy {
@@ -97,6 +98,17 @@ contract EllipsisProxy {
 
     function voteForTokenApproval(uint256 _voteIndex) external returns (bool) {
         voter.voteForTokenApproval(_voteIndex);
+        return true;
+    }
+
+    // RewardsToken
+
+    function getReward(IRewardsToken _lpToken, IERC20[] calldata _rewards) external returns (bool) {
+        _lpToken.getReward();
+        for (uint i = 0; i < _rewards.length; i++) {
+            uint256 balance = _rewards[i].balanceOf(address(this));
+            if (balance > 0) _rewards[i].transfer(msg.sender, balance);
+        }
         return true;
     }
 
