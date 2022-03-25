@@ -2,9 +2,13 @@ pragma solidity 0.8.12;
 
 import "./dependencies/SafeERC20.sol";
 import "./interfaces/IERC20.sol";
-import "./interfaces/ellipsis/ILpStaker.sol";
 import "./interfaces/dotdot/IEpsProxy.sol";
 import "./interfaces/dotdot/IDepositToken.sol";
+import "./interfaces/dotdot/IDddToken.sol";
+import "./interfaces/dotdot/ILockedEPX.sol";
+import "./interfaces/dotdot/IBondedFeeDistributor.sol";
+import "./interfaces/dotdot/IDddIncentiveDistributor.sol";
+import "./interfaces/ellipsis/ILpStaker.sol";
 import "./interfaces/ellipsis/IRewardsToken.sol";
 
 
@@ -23,8 +27,15 @@ contract LpDepositor {
     IERC20 public immutable EPX;
     IEllipsisLpStaking public immutable lpStaker;
 
+    IDddToken public immutable DDD;
+    ILockedEPX public immutable dEPX;
+    IBondedFeeDistributor public immutable bondedDistributor;
+    IDddIncentiveDistributor public immutable dddIncentiveDistributor;
     IEllipsisProxy public immutable proxy;
     address public immutable depositTokenImplementation;
+
+    uint256 public pendingBonderFee;
+    uint256 public lastBonderFeeTransfer;
 
     // user -> pool -> deposit amount
     mapping(address => mapping(address => uint256)) public userBalances;
@@ -50,14 +61,25 @@ contract LpDepositor {
 
     constructor(
         IERC20 _EPX,
+        IDddToken _DDD,
+        ILockedEPX _dEPX,
         IEllipsisProxy _proxy,
         IEllipsisLpStaking _lpStaker,
+        IBondedFeeDistributor _bondedDistributor,
+        IDddIncentiveDistributor _dddIncentiveDistributor,
         address _depositTokenImplementation
     ) {
         EPX = _EPX;
+        DDD = _DDD;
+        dEPX = _dEPX;
         proxy = _proxy;
         lpStaker = _lpStaker;
+        bondedDistributor = _bondedDistributor;
+        dddIncentiveDistributor = _dddIncentiveDistributor;
         depositTokenImplementation = _depositTokenImplementation;
+
+        _EPX.approve(address(_dEPX), type(uint256).max);
+        _dEPX.approve(address(_dddIncentiveDistributor), type(uint256).max);
     }
 
     function claimable(address _user, address[] calldata _tokens) external view returns (Amounts[] memory) {
@@ -149,13 +171,8 @@ contract LpDepositor {
             claims.ddd += unclaimedRewards[_user][token].ddd;
             delete unclaimedRewards[_user][token];
         }
-        if (claims.epx > 0) {
-            // TODO
-        }
-        if (claims.ddd > 0) {
-            // TODO
-        }
-
+        if (claims.epx > 0) EPX.safeTransfer(_user, claims.epx);
+        if (claims.ddd > 0) DDD.mint(_user, claims.ddd);
     }
 
     function claimExtraRewards(address user, address pool) external {
@@ -225,7 +242,7 @@ contract LpDepositor {
         if (reward > 0) {
             uint256 fee = reward * 15 / 100;
             reward -= fee;
-            //unclaimedSolidBonus += fee;
+            pendingBonderFee += fee;
 
             integral.epx += 1e18 * reward / total;
             integral.ddd += 1e18 * (reward * 100 / 888) / total;
@@ -239,7 +256,26 @@ contract LpDepositor {
             rewardIntegralFor[user][pool] = integral;
         }
 
-        if (total > 0 && extraRewards[pool].length > 0) _updateExtraIntegrals(user, pool, balance, total);
+        if (total > 0 && extraRewards[pool].length > 0) {
+            // if this token receives 3rd-party incentives, claim and update integrals
+            _updateExtraIntegrals(user, pool, balance, total);
+        } else if (lastBonderFeeTransfer + 86400 < block.timestamp) {
+            // once a day, transfer pending rewards to dEPX bonders and DDD lockers
+            // we only do this on updates to pools without extra incentives because each
+            // operation can be gas intensive
+            lastBonderFeeTransfer = block.timestamp;
+            uint256 pending = pendingBonderFee;
+            if (pending > 0) {
+                pendingBonderFee = 0;
+                // dEPX bonders receive 2/3's of the EPX and all the DDD
+                EPX.safeTransfer(address(bondedDistributor), pending / 3 * 2);
+                DDD.mint(address(bondedDistributor), pending * 100 / 888);
+                bondedDistributor.notifyFeeAmounts(pending / 3 * 2, pending * 100 / 888);
+                // DDD lockers receive 1/3 of the EPX (as dEPX)
+                dEPX.deposit(address(this), pending / 3);
+                dddIncentiveDistributor.depositIncentive(address(0), address(dEPX), pending / 3);
+            }
+        }
     }
 
     function _updateExtraIntegrals(
