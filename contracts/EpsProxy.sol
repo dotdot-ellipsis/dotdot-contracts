@@ -146,13 +146,13 @@ contract EllipsisProxy is Ownable {
     }
 
     function createTokenApprovalVote(address _token) external returns (uint256 _voteIndex) {
-        // TODO
+        require(msg.sender == dddVoter);
         return voter.createTokenApprovalVote(_token);
     }
 
-    function voteForTokenApproval(uint256 _voteIndex) external returns (bool) {
-        // TODO
-        voter.voteForTokenApproval(_voteIndex);
+    function voteForTokenApproval(uint256 _voteIndex, uint256 _yesVotes) external returns (bool) {
+        require(msg.sender == dddVoter);
+        voter.voteForTokenApproval(_voteIndex, _yesVotes);
         return true;
     }
 

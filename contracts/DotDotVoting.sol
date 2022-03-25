@@ -11,6 +11,10 @@ contract DotDotVoting {
         address token;
         uint256 votes;
     }
+    struct TokenApprovalVote {
+        uint256 week;
+        uint256 ratio;
+    }
 
     // user -> week -> votes used
     mapping(address => uint256[65535]) public userVotes;
@@ -24,10 +28,18 @@ contract DotDotVoting {
     // week -> number of EPS votes per DDD vote
     uint256[65535] public epsVoteRatio;
 
+    // vote ID -> user -> yes votes
+    mapping(uint256 => mapping(address => uint256)) public userTokenApprovalVotes;
+    // user -> timestamp of last created token approval vote
+    mapping(address => uint256) public lastVote;
+
+    mapping (uint256 => TokenApprovalVote) tokenApprovalVotes;
+
     uint256 constant WEEK = 86400 * 7;
     uint256 public startTime;
 
     IIncentiveVoting public immutable epsVoter;
+    ITokenLocker public immutable epsLocker;
 
     ITokenLocker public immutable dddLocker;
     address public immutable fixedVoteLpToken;
@@ -46,11 +58,13 @@ contract DotDotVoting {
 
     constructor(
         IIncentiveVoting _epsVoter,
+        ITokenLocker _epsLocker,
         ITokenLocker _dddLocker,
         address _fixedVoteLpToken,
         IEllipsisProxy _proxy
     ) {
         epsVoter = _epsVoter;
+        epsLocker = _epsLocker;
         dddLocker = _dddLocker;
         fixedVoteLpToken = _fixedVoteLpToken;
         proxy = _proxy;
@@ -168,4 +182,58 @@ contract DotDotVoting {
         );
     }
 
+    function minWeightForNewTokenApprovalVote() public view returns (uint256) {
+        uint256 epsVotes = epsLocker.weeklyWeightOf(address(proxy), epsLocker.getWeek() - 1);
+        uint256 dddVotes = dddLocker.weeklyTotalWeight(getWeek() - 1) / 1e18;
+        uint256 ratio = epsVotes / dddVotes;
+        return epsVoter.NEW_TOKEN_APPROVAL_VOTE_MIN_WEIGHT() / ratio;
+    }
+
+    function createTokenApprovalVote(address _token) external returns (uint256 _voteIndex) {
+        require(lastVote[msg.sender] + 86400 * 30 < block.timestamp, "One new vote per 30 days");
+        uint256 weight = dddLocker.weeklyWeightOf(msg.sender, getWeek() - 1);
+        require(weight >= minWeightForNewTokenApprovalVote(), "User has insufficient DotDot lock weight");
+        return proxy.createTokenApprovalVote(_token);
+    }
+
+    function availableTokenApprovalVotes(address _user, uint256 _voteIndex) external view returns (uint256) {
+        uint256 ratio = tokenApprovalVotes[_voteIndex].ratio;
+        uint256 week = tokenApprovalVotes[_voteIndex].week;
+        if (ratio == 0) {
+            week = getWeek() - 1;
+            uint256 epsVotes = epsVoter.availableTokenApprovalVotes(address(proxy), _voteIndex);
+            if (epsVotes == 0) return 0;
+            uint256 dddVotes = dddLocker.weeklyTotalWeight(week) / 1e18;
+            ratio = epsVotes / dddVotes;
+        }
+        uint256 totalVotes = dddLocker.weeklyWeightOf(_user, week) / 1e18;
+        uint256 usedVotes = userTokenApprovalVotes[_voteIndex][_user];
+        return totalVotes - usedVotes;
+    }
+
+    /**
+        @notice Vote in favor of approving a new token for protocol emissions
+        @param _voteIndex Array index referencing the vote
+     */
+    function voteForTokenApproval(uint256 _voteIndex, uint256 _yesVotes) external {
+        TokenApprovalVote storage vote = tokenApprovalVotes[_voteIndex];
+        if (vote.ratio == 0) {
+            vote.week = getWeek() - 1;
+            uint256 epsVotes = epsVoter.availableTokenApprovalVotes(address(proxy), _voteIndex);
+            require(epsVotes > 0, "Vote has closed or does not exist");
+            uint256 dddVotes = dddLocker.weeklyTotalWeight(vote.week) / 1e18;
+            vote.ratio = epsVotes / dddVotes;
+        }
+
+        uint256 totalVotes = dddLocker.weeklyWeightOf(msg.sender, vote.week) / 1e18;
+        uint256 usedVotes = userTokenApprovalVotes[_voteIndex][msg.sender];
+        if (_yesVotes == type(uint256).max) {
+            _yesVotes = totalVotes - usedVotes;
+        }
+        usedVotes += _yesVotes;
+        require(usedVotes <= totalVotes, "Exceeds available votes");
+
+        userTokenApprovalVotes[_voteIndex][msg.sender] = usedVotes;
+        proxy.voteForTokenApproval(_voteIndex, _yesVotes * vote.ratio);
+    }
 }

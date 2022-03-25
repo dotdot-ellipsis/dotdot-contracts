@@ -9,6 +9,8 @@ interface ITokenLocker {
     function totalWeight() external view returns (uint256);
     function weeklyWeight(address _user, uint256 _week) external view returns (uint256, uint256);
     function startTime() external view returns (uint256);
+    function weeklyTotalWeight(uint256 week) external view returns (uint256);
+    function weeklyWeightOf(address user, uint256 week) external view returns (uint256);
 
     /**
         @notice Get data on a user's active token locks
