@@ -30,6 +30,7 @@ contract DotDotVoting {
     IIncentiveVoting public immutable epsVoter;
 
     ITokenLocker public immutable dddLocker;
+    address public immutable fixedVoteLpToken;
     IEllipsisProxy public immutable proxy;
 
     mapping(address => bool) public isApproved;
@@ -46,10 +47,12 @@ contract DotDotVoting {
     constructor(
         IIncentiveVoting _epsVoter,
         ITokenLocker _dddLocker,
+        address _fixedVoteLpToken,
         IEllipsisProxy _proxy
     ) {
         epsVoter = _epsVoter;
         dddLocker = _dddLocker;
+        fixedVoteLpToken = _fixedVoteLpToken;
         proxy = _proxy;
 
         startTime = _epsVoter.startTime();
@@ -122,6 +125,15 @@ contract DotDotVoting {
         uint256 ratio = epsVoteRatio[week];
         if (ratio == 0) {
             uint256 epsVotes = epsVoter.availableVotes(address(proxy));
+
+            // use 5% of the votes for EPX/dEPX pool
+            address[] memory fixedVoteToken = new address[](1);
+            fixedVoteToken[0] = fixedVoteLpToken;
+            uint256[] memory fixedVote = new uint256[](1);
+            fixedVote[0] = epsVotes / 20;
+            proxy.vote(fixedVoteToken, fixedVote);
+            epsVotes -= fixedVote[0];
+
             uint256 dddVotes = dddLocker.totalWeight() / 1e18;
             ratio = epsVotes / dddVotes;
             epsVoteRatio[week] = ratio;
