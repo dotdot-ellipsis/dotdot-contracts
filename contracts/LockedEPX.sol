@@ -5,10 +5,10 @@ import "./interfaces/dotdot/IEpsProxy.sol";
 import "./interfaces/ellipsis/ITokenLocker.sol";
 
 
-contract EllipsisToken2 is IERC20 {
+contract LockedEPX is IERC20 {
 
-    string public constant symbol = "";
-    string public constant name = "";
+    string public constant symbol = "dEPX";
+    string public constant name = "DotDot Tokenized EPX Lock";
     uint8 public constant decimals = 18;
     uint256 public override totalSupply;
 
