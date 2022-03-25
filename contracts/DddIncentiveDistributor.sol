@@ -3,8 +3,10 @@ pragma solidity 0.8.12;
 import "./interfaces/IERC20.sol";
 import "./dependencies/SafeERC20.sol";
 import "./interfaces/dotdot/IDotDotVoting.sol";
+import "./interfaces/ellipsis/ITokenLocker.sol";
 
-contract BribeDistributor {
+
+contract DddIncentiveDistributor {
     using SafeERC20 for IERC20;
 
     struct StreamData {
@@ -37,6 +39,7 @@ contract BribeDistributor {
     // when set to true, other accounts cannot call `claim` on behalf of an account
     mapping(address => bool) public blockThirdPartyActions;
 
+    ITokenLocker public immutable dddLocker;
     IDotDotVoting public immutable dddVoter;
     uint256 public immutable startTime;
 
@@ -57,7 +60,8 @@ contract BribeDistributor {
         uint256 amount
     );
 
-    constructor(IDotDotVoting _dddVoter) {
+    constructor(ITokenLocker _dddLocker, IDotDotVoting _dddVoter) {
+        dddLocker = _dddLocker;
         dddVoter = _dddVoter;
         startTime = _dddVoter.startTime();
 
@@ -86,20 +90,20 @@ contract BribeDistributor {
         @param _lpToken Token being deposited
         @param _amount Amount of the token to deposit
      */
-    function depositBribe(address _lpToken, address _bribe, uint256 _amount)
+    function depositIncentive(address _lpToken, address _incentive, uint256 _amount)
         external
         returns (bool)
     {
         if (_amount > 0) {
-            if (!seenTokens[_lpToken][_bribe]) {
-                seenTokens[_lpToken][_bribe] = true;
-                bribeTokens[_lpToken].push(_bribe);
+            if (!seenTokens[_lpToken][_incentive]) {
+                seenTokens[_lpToken][_incentive] = true;
+                bribeTokens[_lpToken].push(_incentive);
             }
-            uint256 received = IERC20(_bribe).balanceOf(address(this));
-            IERC20(_bribe).safeTransferFrom(msg.sender, address(this), _amount);
-            received = IERC20(_bribe).balanceOf(address(this)) - received;
+            uint256 received = IERC20(_incentive).balanceOf(address(this));
+            IERC20(_incentive).safeTransferFrom(msg.sender, address(this), _amount);
+            received = IERC20(_incentive).balanceOf(address(this)) - received;
             uint256 week = getWeek();
-            weeklyFeeAmounts[_lpToken][_bribe][week] += received;
+            weeklyFeeAmounts[_lpToken][_incentive][week] += received;
             //emit FeesReceived(msg.sender, _bribe, week, _amount);
         }
         return true;
@@ -191,7 +195,7 @@ contract BribeDistributor {
 
         // iterate over weeks that have passed fully without any claims
         for (uint256 i = lastClaimWeek; i < claimableWeek; i++) {
-            (uint256 userWeight, uint256 totalWeight) = dddVoter.weeklyVotes(_user, _lpToken, i);
+            (uint256 userWeight, uint256 totalWeight) = _getWeights(_user, _lpToken, i);
             if (userWeight == 0) continue;
             amount += weeklyFeeAmounts[_lpToken][_token][i] * userWeight / totalWeight;
         }
@@ -209,7 +213,7 @@ contract BribeDistributor {
         uint256 _week
     ) internal view returns (StreamData memory) {
         uint256 start = startTime + _week * WEEK;
-        (uint256 userWeight, uint256 totalWeight) = dddVoter.weeklyVotes(_user, _lpToken, _week);
+        (uint256 userWeight, uint256 totalWeight) = _getWeights(_user, _lpToken, _week);
         uint256 amount;
         uint256 claimed;
         if (userWeight > 0) {
@@ -217,5 +221,17 @@ contract BribeDistributor {
             claimed = amount * (block.timestamp - 604800 - start) / WEEK;
         }
         return StreamData({start: start, amount: amount, claimed: claimed});
+    }
+
+    function _getWeights(address _user, address _lpToken, uint256 _week)
+        internal
+        view
+        returns (uint256 userWeight, uint256 totalWeight)
+    {
+        if (_lpToken == address(0)) {
+            return dddLocker.weeklyWeight(_user, _week);
+        } else {
+            return dddVoter.weeklyVotes(_user, _lpToken, _week);
+        }
     }
 }

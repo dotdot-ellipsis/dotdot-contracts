@@ -7,6 +7,7 @@ interface ITokenLocker {
     function getWeek() external view returns (uint256);
     function userWeight(address _user) external view returns (uint256);
     function totalWeight() external view returns (uint256);
+    function weeklyWeight(address _user, uint256 _week) external view returns (uint256, uint256);
     function startTime() external view returns (uint256);
 
     /**
