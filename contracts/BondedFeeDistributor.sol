@@ -56,9 +56,12 @@ contract BondedFeeDistributor {
     // when set to true, other accounts cannot call `claim` on behalf of an account
     mapping(address => bool) public blockThirdPartyActions;
 
+    address public immutable EPX;
     IFeeDistributor public immutable epsFeeDistributor;
 
-    IERC20 public immutable stakingToken;
+    IERC20 public immutable dEPX;
+    address public immutable DDD;
+    address public immutable lpDepositor;
     IEllipsisProxy public immutable proxy;
 
     uint256 public immutable startTime;
@@ -75,10 +78,22 @@ contract BondedFeeDistributor {
         uint256 amount
     );
 
-    constructor(IERC20 _stakingToken, IFeeDistributor _feeDistributor, IEllipsisProxy _proxy) {
-        stakingToken = _stakingToken;
+    constructor(
+        address _EPX,
+        IFeeDistributor _feeDistributor,
+        IERC20 _dEPX,
+        address _DDD,
+        address _lpDepositor,
+        IEllipsisProxy _proxy
+    ) {
+        EPX = _EPX;
         epsFeeDistributor = _feeDistributor;
+
+        dEPX = _dEPX;
+        DDD = _DDD;
+        lpDepositor = _lpDepositor;
         proxy = _proxy;
+
         startTime = _feeDistributor.startTime();
     }
 
@@ -170,7 +185,7 @@ contract BondedFeeDistributor {
     }
 
     function deposit(address _user, uint256 _amount) external {
-        stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
+        dEPX.safeTransferFrom(msg.sender, address(this), _amount);
 
         uint256 balance = _extendBalanceArray(weeklyUserBalance[_user]);
         uint256 total = _extendBalanceArray(totalBalance);
@@ -276,7 +291,7 @@ contract BondedFeeDistributor {
             } else {
                 stream.claimed = stream.claimed + amount;
             }
-            stakingToken.safeTransfer(_receiver, amount);
+            dEPX.safeTransfer(_receiver, amount);
         }
         return true;
     }
@@ -290,7 +305,7 @@ contract BondedFeeDistributor {
         uint256 week = getWeek();
         for (uint i = 0; i < _tokens.length; i++) {
             address token = _tokens[i];
-            require(token != address(stakingToken), "Cannot distribute DDD as a fee token");
+            require(token != address(dEPX), "Cannot distribute dEPX as a fee token");
             uint256 balance = tokenBalance[token];
             uint256 received = IERC20(token).balanceOf(address(this)) - balance;
             if (received > 0) {
@@ -300,6 +315,23 @@ contract BondedFeeDistributor {
                 lastClaim[token] = block.timestamp;
             }
         }
+    }
+
+    /**
+        @notice Notify contract of newly received DDD and EPX fees
+        @dev Only callable by `LpDepositor`. We trust the caller to supply the correct amounts.
+     */
+    function notifyFeeAmounts(uint256 _epxAmount, uint256 _dddAmount) external returns (bool) {
+        require(msg.sender == lpDepositor);
+        uint256 week = getWeek();
+
+        weeklyFeeAmounts[EPX][week] += _epxAmount;
+        tokenBalance[EPX] += _epxAmount;
+
+        weeklyFeeAmounts[DDD][week] += _dddAmount;
+        tokenBalance[DDD] += _dddAmount;
+
+        return true;
     }
 
     function _getClaimable(address _user, address _token)
