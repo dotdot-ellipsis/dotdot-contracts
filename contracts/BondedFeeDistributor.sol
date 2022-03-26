@@ -1,12 +1,13 @@
 pragma solidity 0.8.12;
 
 import "./dependencies/SafeERC20.sol";
+import "./dependencies/Ownable.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/dotdot/IEpsProxy.sol";
 import "./interfaces/ellipsis/IFeeDistributor.sol";
 
 
-contract BondedFeeDistributor {
+contract BondedFeeDistributor is Ownable {
     using SafeERC20 for IERC20;
 
     struct StreamData {
@@ -18,17 +19,10 @@ contract BondedFeeDistributor {
         uint256 timestamp;
         uint256 amount;
     }
-
     struct DepositData {
         uint256 index;
         Deposit[] deposits;
     }
-
-    mapping(address => uint256[]) weeklyUserBalance;
-    uint256[] totalBalance;
-
-    mapping (address => DepositData) userDeposits;
-    mapping (address => StreamData) exitStream;
 
     // Fees are transferred into this contract as they are collected, and in the same tokens
     // that they are collected in. The total amount collected each week is recorded in
@@ -37,9 +31,28 @@ contract BondedFeeDistributor {
     // about the active stream for each token is tracked in `activeUserStream`
 
     // fee token -> week -> total amount received that week
-    mapping(address => mapping(uint256 => uint256)) public weeklyFeeAmounts;
+    mapping(address => uint256[65535]) public weeklyFeeAmounts;
     // user -> fee token -> data about the active stream
     mapping(address => mapping(address => StreamData)) activeUserStream;
+
+
+    // Weekly bonded balances are stored within a dynamic array, where the array index
+    // represents the week. The final value is always the current balance. The length
+    // will be less than that of `getWeek` if a user has not interacted in over a week.
+
+    // user -> weekly bonded balance
+    mapping(address => uint256[]) weeklyUserBalance;
+    // weekly total bonded balance
+    uint256[] totalBalance;
+
+    // Deposited balances are "bonded" in order to receive fees. Each deposit cannot be
+    // "unbonded" (withdrawn via a linear stream) for `MIN_BOND_DURATION` after bonding.
+
+    // user -> deposit data
+    mapping (address => DepositData) userDeposits;
+    // users -> data on the active unbonding stream
+    mapping (address => StreamData) exitStream;
+
 
     // array of all fee tokens that have been added
     address[] public feeTokens;
@@ -52,17 +65,18 @@ contract BondedFeeDistributor {
     // if receiver is set to address(0), rewards are paid to the earner
     // this is used to aid 3rd party contract integrations
     mapping (address => address) public claimReceiver;
-
     // when set to true, other accounts cannot call `claim` on behalf of an account
     mapping(address => bool) public blockThirdPartyActions;
 
+    // Ellipsis contracts
     address public immutable EPX;
     IFeeDistributor public immutable epsFeeDistributor;
 
-    IERC20 public immutable dEPX;
-    address public immutable DDD;
-    address public immutable lpDepositor;
-    IEllipsisProxy public immutable proxy;
+    // DotDot contracts
+    IERC20 public dEPX;
+    address public DDD;
+    address public lpDepositor;
+    IEllipsisProxy public proxy;
 
     uint256 public immutable startTime;
 
@@ -78,23 +92,24 @@ contract BondedFeeDistributor {
         uint256 amount
     );
 
-    constructor(
-        address _EPX,
-        IFeeDistributor _feeDistributor,
+    constructor(address _EPX, IFeeDistributor _feeDistributor) {
+        EPX = _EPX;
+        epsFeeDistributor = _feeDistributor;
+        startTime = _feeDistributor.startTime();
+    }
+
+    function setAddresses(
         IERC20 _dEPX,
         address _DDD,
         address _lpDepositor,
         IEllipsisProxy _proxy
-    ) {
-        EPX = _EPX;
-        epsFeeDistributor = _feeDistributor;
-
+    ) external onlyOwner {
         dEPX = _dEPX;
         DDD = _DDD;
         lpDepositor = _lpDepositor;
         proxy = _proxy;
 
-        startTime = _feeDistributor.startTime();
+        renounceOwnership();
     }
 
     function setClaimReceiver(address _receiver) external {
@@ -162,6 +177,7 @@ contract BondedFeeDistributor {
 
             uint256 lastClaimed = lastClaim[token];
             if (lastClaimed + 86400 <= block.timestamp) {
+                // once a day, claim new fees from Ellipsis
                 tokensToFetch[toFetchLength] = token;
                 toFetchLength++;
             }
@@ -184,7 +200,17 @@ contract BondedFeeDistributor {
         return claimedAmounts;
     }
 
+    /**
+        @notice Bond dEPX within the contract in order to receive fees
+        @dev Bonded tokens cannot be withdrawn for `MIN_BOND_DURATION`
+        @param _user Address to deposit tokens for
+        @param _amount Amount of dEPX to deposit
+     */
     function deposit(address _user, uint256 _amount) external {
+        if (msg.sender != _user) {
+            require(!blockThirdPartyActions[_user], "Cannot deposit on behalf of this account");
+        }
+
         dEPX.safeTransferFrom(msg.sender, address(this), _amount);
 
         uint256 balance = _extendBalanceArray(weeklyUserBalance[_user]);
@@ -298,7 +324,12 @@ contract BondedFeeDistributor {
 
     /**
         @notice Fetch fees from the Ellipsis fee distributor
-        @dev Fees received within a week are distributed in the following week
+        @dev Fees received within a week are distributed in the following week.
+             When a user claims a fee token from this contract, an onward claim
+             to Ellipsis is made if the last claim was more than one day ago.
+             In theory, this should mean each fee token must be claimed using
+             `fetchEllipsisFees` once to create an initial claimable amount
+             for users. Subsequent calls will happen via regular user interactions.
      */
     function fetchEllipsisFees(address[] memory _tokens) public {
         proxy.claimFees(_tokens);

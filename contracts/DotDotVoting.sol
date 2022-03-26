@@ -1,11 +1,13 @@
 pragma solidity 0.8.12;
 
+import "./dependencies/Ownable.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/dotdot/IEpsProxy.sol";
 import "./interfaces/ellipsis/ITokenLocker.sol";
 import "./interfaces/ellipsis/IIncentiveVoting.sol";
 
-contract DotDotVoting {
+
+contract DotDotVoting is Ownable {
 
     struct Vote {
         address token;
@@ -41,9 +43,9 @@ contract DotDotVoting {
     IIncentiveVoting public immutable epsVoter;
     ITokenLocker public immutable epsLocker;
 
-    ITokenLocker public immutable dddLocker;
-    address public immutable fixedVoteLpToken;
-    IEllipsisProxy public immutable proxy;
+    ITokenLocker public dddLocker;
+    address public fixedVoteLpToken;
+    IEllipsisProxy public proxy;
 
     mapping(address => bool) public isApproved;
     address[] public approvedTokens;
@@ -58,18 +60,24 @@ contract DotDotVoting {
 
     constructor(
         IIncentiveVoting _epsVoter,
-        ITokenLocker _epsLocker,
-        ITokenLocker _dddLocker,
-        address _fixedVoteLpToken,
-        IEllipsisProxy _proxy
+        ITokenLocker _epsLocker
     ) {
         epsVoter = _epsVoter;
         epsLocker = _epsLocker;
+
+        startTime = _epsVoter.startTime();
+    }
+
+    function setAddresses(
+        ITokenLocker _dddLocker,
+        address _fixedVoteLpToken,
+        IEllipsisProxy _proxy
+    ) external onlyOwner {
         dddLocker = _dddLocker;
         fixedVoteLpToken = _fixedVoteLpToken;
         proxy = _proxy;
 
-        startTime = _epsVoter.startTime();
+        renounceOwnership();
     }
 
     function approvedTokensLength() external view returns (uint256) {

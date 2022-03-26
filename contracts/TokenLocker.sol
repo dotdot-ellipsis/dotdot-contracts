@@ -1,10 +1,11 @@
 pragma solidity 0.8.12;
 
-import "./interfaces/IERC20.sol";
+import "./dependencies/Ownable.sol";
 import "./dependencies/SafeERC20.sol";
+import "./interfaces/IERC20.sol";
 
 
-contract TokenLocker {
+contract TokenLocker is Ownable {
     using SafeERC20 for IERC20;
 
     struct StreamData {
@@ -39,7 +40,7 @@ contract TokenLocker {
     // when set to true, other accounts cannot call `lock` on behalf of an account
     mapping(address => bool) public blockThirdPartyActions;
 
-    IERC20 public immutable stakingToken;
+    IERC20 public DDD;
     uint256 public immutable startTime;
 
     uint256 constant WEEK = 86400 * 7;
@@ -65,15 +66,18 @@ contract TokenLocker {
     );
 
     constructor(
-        IERC20 _stakingToken,
         TokenLocker _epsLocker,
         uint256 _maxLockWeeks
     ) {
         MAX_LOCK_WEEKS = _maxLockWeeks;
-        stakingToken = _stakingToken;
         // start time is shifted 3 days earlier so that the week ends
         // at the same time that the dotdot voting period opens
         startTime = _epsLocker.startTime() - 86400 * 3;
+    }
+
+    function setAddresses(IERC20 _DDD) external onlyOwner {
+        DDD = _DDD;
+        renounceOwnership();
     }
 
     /**
@@ -194,7 +198,7 @@ contract TokenLocker {
         require(_weeks <= MAX_LOCK_WEEKS, "Exceeds MAX_LOCK_WEEKS");
         require(_amount > 0, "Amount must be nonzero");
 
-        stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
+        DDD.safeTransferFrom(msg.sender, address(this), _amount);
 
         uint256 start = getWeek();
         _increaseAmount(_user, start, _amount, _weeks, 0);
@@ -271,7 +275,7 @@ contract TokenLocker {
             } else {
                 stream.claimed = stream.claimed + amount;
             }
-            stakingToken.safeTransfer(msg.sender, amount);
+            DDD.safeTransfer(msg.sender, amount);
         }
         emit ExitStreamWithdrawal(
             msg.sender,
@@ -282,7 +286,7 @@ contract TokenLocker {
     }
 
     /**
-        @notice Get the amount of `stakingToken` in expired locks that is
+        @notice Get the amount of `DDD` in expired locks that is
                 eligible to be released via an exit stream.
      */
     function streamableBalance(address _user) public view returns (uint256) {

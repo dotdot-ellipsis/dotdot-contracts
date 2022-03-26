@@ -16,8 +16,8 @@ contract EllipsisProxy is Ownable {
     IERC20 public immutable EPX;
     ITokenLocker public immutable epsLocker;
     IEllipsisLpStaking public immutable lpStaker;
-    IFeeDistributor public immutable feeDistributor;
-    IIncentiveVoting public immutable voter;
+    IFeeDistributor public immutable epsFeeDistributor;
+    IIncentiveVoting public immutable epsVoter;
 
     address public dEPX;
     address public lpDepositor;
@@ -38,8 +38,8 @@ contract EllipsisProxy is Ownable {
         EPX = _EPX;
         epsLocker = _epsLocker;
         lpStaker = _lpStaker;
-        feeDistributor = _feeDistributor;
-        voter = _voter;
+        epsFeeDistributor = _feeDistributor;
+        epsVoter = _voter;
 
         _epsLocker.setBlockThirdPartyActions(true);
         _lpStaker.setBlockThirdPartyActions(true);
@@ -61,7 +61,7 @@ contract EllipsisProxy is Ownable {
         dddVoter = _dddVoter;
 
         lpStaker.setClaimReceiver(address(lpDepositor));
-        feeDistributor.setClaimReceiver(address(bondedDistributor));
+        epsFeeDistributor.setClaimReceiver(address(bondedDistributor));
 
         renounceOwnership();
     }
@@ -133,7 +133,7 @@ contract EllipsisProxy is Ownable {
 
     function claimFees(address[] calldata _tokens) external returns (bool) {
         require(msg.sender == bondedDistributor);
-        feeDistributor.claim(address(this), _tokens);
+        epsFeeDistributor.claim(address(this), _tokens);
         return true;
     }
 
@@ -141,18 +141,18 @@ contract EllipsisProxy is Ownable {
 
     function vote(address[] calldata _tokens, uint256[] calldata _votes) external returns (bool) {
         require(msg.sender == dddVoter);
-        voter.vote(_tokens, _votes);
+        epsVoter.vote(_tokens, _votes);
         return true;
     }
 
     function createTokenApprovalVote(address _token) external returns (uint256 _voteIndex) {
         require(msg.sender == dddVoter);
-        return voter.createTokenApprovalVote(_token);
+        return epsVoter.createTokenApprovalVote(_token);
     }
 
     function voteForTokenApproval(uint256 _voteIndex, uint256 _yesVotes) external returns (bool) {
         require(msg.sender == dddVoter);
-        voter.voteForTokenApproval(_voteIndex, _yesVotes);
+        epsVoter.voteForTokenApproval(_voteIndex, _yesVotes);
         return true;
     }
 

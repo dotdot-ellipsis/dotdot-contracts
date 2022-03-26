@@ -1,5 +1,6 @@
 pragma solidity 0.8.12;
 
+import "./dependencies/Ownable.sol";
 import "./dependencies/SafeERC20.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/dotdot/IEpsProxy.sol";
@@ -12,7 +13,7 @@ import "./interfaces/ellipsis/ILpStaker.sol";
 import "./interfaces/ellipsis/IRewardsToken.sol";
 
 
-contract LpDepositor {
+contract LpDepositor is Ownable {
     using SafeERC20 for IERC20;
 
     struct Amounts {
@@ -27,12 +28,12 @@ contract LpDepositor {
     IERC20 public immutable EPX;
     IEllipsisLpStaking public immutable lpStaker;
 
-    IDddToken public immutable DDD;
-    ILockedEPX public immutable dEPX;
-    IBondedFeeDistributor public immutable bondedDistributor;
-    IDddIncentiveDistributor public immutable dddIncentiveDistributor;
-    IEllipsisProxy public immutable proxy;
-    address public immutable depositTokenImplementation;
+    IDddToken public DDD;
+    ILockedEPX public dEPX;
+    IBondedFeeDistributor public bondedDistributor;
+    IDddIncentiveDistributor public dddIncentiveDistributor;
+    IEllipsisProxy public proxy;
+    address public depositTokenImplementation;
 
     uint256 public pendingBonderFee;
     uint256 public lastBonderFeeTransfer;
@@ -59,27 +60,32 @@ contract LpDepositor {
     // user -> pool -> unclaimed reward balances
     mapping(address => mapping(address => uint256[])) public unclaimedExtraRewards;
 
-    constructor(
-        IERC20 _EPX,
+    constructor(IERC20 _EPX, IEllipsisLpStaking _lpStaker) {
+        EPX = _EPX;
+        lpStaker = _lpStaker;
+    }
+
+    function setAddresses(
         IDddToken _DDD,
         ILockedEPX _dEPX,
         IEllipsisProxy _proxy,
-        IEllipsisLpStaking _lpStaker,
+
         IBondedFeeDistributor _bondedDistributor,
         IDddIncentiveDistributor _dddIncentiveDistributor,
         address _depositTokenImplementation
-    ) {
-        EPX = _EPX;
+    ) external onlyOwner {
         DDD = _DDD;
         dEPX = _dEPX;
         proxy = _proxy;
-        lpStaker = _lpStaker;
+
         bondedDistributor = _bondedDistributor;
         dddIncentiveDistributor = _dddIncentiveDistributor;
         depositTokenImplementation = _depositTokenImplementation;
 
-        _EPX.approve(address(_dEPX), type(uint256).max);
+        EPX.approve(address(_dEPX), type(uint256).max);
         _dEPX.approve(address(_dddIncentiveDistributor), type(uint256).max);
+
+        renounceOwnership();
     }
 
     function claimable(address _user, address[] calldata _tokens) external view returns (Amounts[] memory) {
@@ -175,6 +181,9 @@ contract LpDepositor {
         if (claims.ddd > 0) DDD.mint(_user, claims.ddd);
     }
 
+    /**
+        @notice Claim all third-party incentives earned by `user` from `pool`
+     */
     function claimExtraRewards(address user, address pool) external {
         uint256 total = totalBalances[pool];
         uint256 balance = userBalances[user][pool];
@@ -189,6 +198,11 @@ contract LpDepositor {
         }
     }
 
+    /**
+        @notice Update the local cache of third-party rewards for a given LP token
+        @dev Must be called each time a new incentive token is added to a pool, in
+             order for the protocol to begin distributing that token.
+     */
     function updatePoolExtraRewards(address pool) external {
         uint256 count = IRewardsToken(pool).rewardCount();
         address[] storage rewards = extraRewards[pool];

@@ -1,12 +1,13 @@
 pragma solidity 0.8.12;
 
-import "./interfaces/IERC20.sol";
+import "./dependencies/Ownable.sol";
 import "./dependencies/SafeERC20.sol";
+import "./interfaces/IERC20.sol";
 import "./interfaces/dotdot/IDotDotVoting.sol";
 import "./interfaces/ellipsis/ITokenLocker.sol";
 
 
-contract DddIncentiveDistributor {
+contract DddIncentiveDistributor is Ownable {
     using SafeERC20 for IERC20;
 
     struct StreamData {
@@ -15,19 +16,13 @@ contract DddIncentiveDistributor {
         uint256 claimed;
     }
 
-    // Fees are transferred into this contract as they are collected, and in the same tokens
-    // that they are collected in. The total amount collected each week is recorded in
-    // `weeklyFeeAmounts`. At the end of a week, the fee amounts are streamed out over
-    // the following week based on each user's lock weight at the end of that week. Data
-    // about the active stream for each token is tracked in `activeUserStream`
-
     // lp token -> bribe token -> week -> total amount received that week
-    mapping(address => mapping(address => uint256[65535])) public weeklyFeeAmounts;
+    mapping(address => mapping(address => uint256[65535])) public weeklyIncentiveAmounts;
     // user -> lp token -> bribe token -> data about the active stream
     mapping(address => mapping(address => mapping(address => StreamData))) activeUserStream;
 
     // lp token -> array of all fee tokens that have been added
-    mapping(address => address[]) public bribeTokens;
+    mapping(address => address[]) public incentiveTokens;
     // private mapping for tracking which addresses were added to `feeTokens`
     mapping(address => mapping(address => bool)) seenTokens;
 
@@ -39,10 +34,10 @@ contract DddIncentiveDistributor {
     // when set to true, other accounts cannot call `claim` on behalf of an account
     mapping(address => bool) public blockThirdPartyActions;
 
-    ITokenLocker public immutable dddLocker;
-    IDotDotVoting public immutable dddVoter;
-    uint256 public immutable startTime;
+    ITokenLocker public dddLocker;
+    IDotDotVoting public dddVoter;
 
+    uint256 public startTime;
     uint256 constant WEEK = 86400 * 7;
 
     // TODO events
@@ -60,11 +55,12 @@ contract DddIncentiveDistributor {
         uint256 amount
     );
 
-    constructor(ITokenLocker _dddLocker, IDotDotVoting _dddVoter) {
+    function setAddresses(ITokenLocker _dddLocker, IDotDotVoting _dddVoter) external onlyOwner {
         dddLocker = _dddLocker;
         dddVoter = _dddVoter;
         startTime = _dddVoter.startTime();
 
+        renounceOwnership();
     }
 
     function setClaimReceiver(address _receiver) external {
@@ -80,15 +76,20 @@ contract DddIncentiveDistributor {
         return (block.timestamp - startTime) / 604800;
     }
 
-    function bribeTokensLength(address _lpToken) external view returns (uint) {
-        return bribeTokens[_lpToken].length;
+    function incentiveTokensLength(address _lpToken) external view returns (uint) {
+        return incentiveTokens[_lpToken].length;
     }
 
     /**
-        @notice Deposit protocol fees into the contract, to be distributed to lockers
-        @dev Caller must have given approval for this contract to transfer `_token`
-        @param _lpToken Token being deposited
+        @notice Deposit incentives into the contract
+        @dev Incentives received in a week will be paid out the following week. An
+             incentive can be given to all DDD lockers (a "fee"), or to lockers that
+             voted for a specific LP token in the current week (a "bribe").
+        @param _lpToken The LP token to incentivize voting for. Set to address(0) if
+                        you are depositing a fee to distribute to all token lockers.
+        @param _incentive Address of the incentive token
         @param _amount Amount of the token to deposit
+        @return bool Success
      */
     function depositIncentive(address _lpToken, address _incentive, uint256 _amount)
         external
@@ -96,14 +97,15 @@ contract DddIncentiveDistributor {
     {
         if (_amount > 0) {
             if (!seenTokens[_lpToken][_incentive]) {
+                // TODO validate that this is actually an approved pool
                 seenTokens[_lpToken][_incentive] = true;
-                bribeTokens[_lpToken].push(_incentive);
+                incentiveTokens[_lpToken].push(_incentive);
             }
             uint256 received = IERC20(_incentive).balanceOf(address(this));
             IERC20(_incentive).safeTransferFrom(msg.sender, address(this), _amount);
             received = IERC20(_incentive).balanceOf(address(this)) - received;
             uint256 week = getWeek();
-            weeklyFeeAmounts[_lpToken][_incentive][week] += received;
+            weeklyIncentiveAmounts[_lpToken][_incentive][week] += received;
             //emit FeesReceived(msg.sender, _bribe, week, _amount);
         }
         return true;
@@ -127,12 +129,14 @@ contract DddIncentiveDistributor {
     }
 
     /**
-        @notice Claim accrued protocol fees according to a locked balance in `TokenLocker`.
-        @dev Fees are claimable up to the end of the previous week. Claimable fees from more
-             than one week ago are released immediately, fees from the previous week are streamed.
-        @param _user Address to claim for. Any account can trigger a claim for any other account.
-        @param _tokens Array of tokens to claim for.
-        @return claimedAmounts Array of amounts claimed.
+        @notice Claim an available fee or bribe.
+        @dev Incentives are claimable up to the end of the previous week. Incentives earned more
+             than one week ago are released immediately, those from the previous week are streamed.
+        @param _user Address to claim for
+        @param _lpToken LP token that was voted on to earn the incentive. Set to address(0)
+                        to claim general fees for all token lockers.
+        @param _tokens Array of tokens to claim
+        @return claimedAmounts Array of amounts claimed
      */
     function claim(address _user, address _lpToken, address[] calldata _tokens)
         external
@@ -197,7 +201,7 @@ contract DddIncentiveDistributor {
         for (uint256 i = lastClaimWeek; i < claimableWeek; i++) {
             (uint256 userWeight, uint256 totalWeight) = _getWeights(_user, _lpToken, i);
             if (userWeight == 0) continue;
-            amount += weeklyFeeAmounts[_lpToken][_token][i] * userWeight / totalWeight;
+            amount += weeklyIncentiveAmounts[_lpToken][_token][i] * userWeight / totalWeight;
         }
 
         // add a partial amount for the active week
@@ -217,7 +221,7 @@ contract DddIncentiveDistributor {
         uint256 amount;
         uint256 claimed;
         if (userWeight > 0) {
-            amount = weeklyFeeAmounts[_lpToken][_token][_week] * userWeight / totalWeight;
+            amount = weeklyIncentiveAmounts[_lpToken][_token][_week] * userWeight / totalWeight;
             claimed = amount * (block.timestamp - 604800 - start) / WEEK;
         }
         return StreamData({start: start, amount: amount, claimed: claimed});
