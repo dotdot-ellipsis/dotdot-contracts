@@ -34,6 +34,7 @@ contract LpDepositor is Ownable {
     IDddIncentiveDistributor public dddIncentiveDistributor;
     IEllipsisProxy public proxy;
     address public depositTokenImplementation;
+    address public fixedVoteLpToken;
 
     uint256 public pendingBonderFee;
     uint256 public lastBonderFeeTransfer;
@@ -69,10 +70,10 @@ contract LpDepositor is Ownable {
         IDddToken _DDD,
         ILockedEPX _dEPX,
         IEllipsisProxy _proxy,
-
         IBondedFeeDistributor _bondedDistributor,
         IDddIncentiveDistributor _dddIncentiveDistributor,
-        address _depositTokenImplementation
+        address _depositTokenImplementation,
+        address _fixedVoteLpToken
     ) external onlyOwner {
         DDD = _DDD;
         dEPX = _dEPX;
@@ -81,6 +82,7 @@ contract LpDepositor is Ownable {
         bondedDistributor = _bondedDistributor;
         dddIncentiveDistributor = _dddIncentiveDistributor;
         depositTokenImplementation = _depositTokenImplementation;
+        fixedVoteLpToken = _fixedVoteLpToken;
 
         EPX.approve(address(_dEPX), type(uint256).max);
         _dEPX.approve(address(_dddIncentiveDistributor), type(uint256).max);
@@ -281,13 +283,16 @@ contract LpDepositor is Ownable {
             uint256 pending = pendingBonderFee;
             if (pending > 0) {
                 pendingBonderFee = 0;
-                // dEPX bonders receive 2/3's of the EPX and all the DDD
+                // 2/3 of EPX and all DDD given to dEPX bonders
                 EPX.safeTransfer(address(bondedDistributor), pending / 3 * 2);
                 DDD.mint(address(bondedDistributor), pending * 100 / 888);
                 bondedDistributor.notifyFeeAmounts(pending / 3 * 2, pending * 100 / 888);
-                // DDD lockers receive 1/3 of the EPX (as dEPX)
-                dEPX.deposit(address(this), pending / 3);
-                dddIncentiveDistributor.depositIncentive(address(0), address(dEPX), pending / 3);
+                // 1/3 of EPX is converted to dEPX
+                dEPX.deposit(address(this), pending / 3, false);
+                // 1/2 of dEPX given to DDD lockers
+                dddIncentiveDistributor.depositIncentive(address(0), address(dEPX), pending / 6);
+                // 1/2 of dEPX as a bribe for the EPX/dEPX pool
+                dddIncentiveDistributor.depositIncentive(fixedVoteLpToken, address(dEPX), pending / 6);
             }
         }
     }
