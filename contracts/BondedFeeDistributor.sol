@@ -206,12 +206,15 @@ contract BondedFeeDistributor is Ownable {
         @param _user Address to deposit tokens for
         @param _amount Amount of dEPX to deposit
      */
-    function deposit(address _user, uint256 _amount) external {
-        if (msg.sender != _user) {
-            require(!blockThirdPartyActions[_user], "Cannot deposit on behalf of this account");
+    function deposit(address _user, uint256 _amount) external returns (bool) {
+        if (msg.sender != address(dEPX)) {
+            // if the caller is dEPX we trust the balance was updated
+            // and skip the transfer
+            if (msg.sender != _user) {
+                require(!blockThirdPartyActions[_user], "Cannot deposit on behalf of this account");
+            }
+            dEPX.safeTransferFrom(msg.sender, address(this), _amount);
         }
-
-        dEPX.safeTransferFrom(msg.sender, address(this), _amount);
 
         uint256 balance = _extendBalanceArray(weeklyUserBalance[_user]);
         uint256 total = _extendBalanceArray(totalBalance);
@@ -228,6 +231,7 @@ contract BondedFeeDistributor is Ownable {
         } else {
             data.deposits[length-1].amount += _amount;
         }
+        return true;
     }
 
     /**

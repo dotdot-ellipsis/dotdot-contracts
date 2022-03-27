@@ -2,6 +2,7 @@ pragma solidity 0.8.12;
 
 import "./dependencies/Ownable.sol";
 import "./interfaces/IERC20.sol";
+import "./interfaces/dotdot/IBondedFeeDistributor.sol";
 import "./interfaces/dotdot/IEpsProxy.sol";
 import "./interfaces/ellipsis/ITokenLocker.sol";
 
@@ -19,6 +20,7 @@ contract LockedEPX is IERC20, Ownable {
     IERC20 public immutable EPX;
     ITokenLocker public immutable epsLocker;
 
+    IBondedFeeDistributor public bondedDistributor;
     IEllipsisProxy public proxy;
 
     uint256 constant WEEK = 604800;
@@ -37,7 +39,11 @@ contract LockedEPX is IERC20, Ownable {
         emit Transfer(address(0), msg.sender, 0);
     }
 
-    function setAddresses(IEllipsisProxy _proxy) external onlyOwner {
+    function setAddresses(
+        IBondedFeeDistributor _bondedDistributor,
+        IEllipsisProxy _proxy
+    ) external onlyOwner {
+        bondedDistributor = _bondedDistributor;
         proxy = _proxy;
 
         renounceOwnership();
@@ -97,15 +103,22 @@ contract LockedEPX is IERC20, Ownable {
         @notice Lock EPX and receive dEPX
         @param _receiver Address to receive the minted dEPX
         @param _amount Amount of EPX to lock. The balance is transferred from the caller.
+        @param _bond If true, minted dEPX is immediately deposited in `BondedFeeDistributor`
         @return bool Success
      */
-    function deposit(address _receiver, uint256 _amount) external returns (bool) {
+    function deposit(address _receiver, uint256 _amount, bool _bond) external returns (bool) {
         extendLock();
         EPX.transferFrom(msg.sender, address(proxy), _amount);
         proxy.lock(_amount);
-        balanceOf[_receiver] += _amount;
         totalSupply += _amount;
-        emit Transfer(address(0), _receiver, _amount);
+        if (_bond) {
+            balanceOf[address(bondedDistributor)] += _amount;
+            emit Transfer(address(0), address(bondedDistributor), _amount);
+            bondedDistributor.deposit(_receiver, _amount);
+        } else {
+            balanceOf[_receiver] += _amount;
+            emit Transfer(address(0), _receiver, _amount);
+        }
         return true;
     }
 
