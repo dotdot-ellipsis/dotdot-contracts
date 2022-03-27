@@ -182,52 +182,52 @@ contract LpDepositor is Ownable {
 
     /**
         @notice Claim pending EPX and DDD rewards
-        @param _user User to claim for
+        @param _receiver Account to send claimed rewards to
         @param _tokens List of LP tokens to claim for
         @param _maxBondAmount Maximum amount of claimed EPX to convert to bonded dEPX.
                               Converting to bonded dEPX earns a multiplier on DDD rewards.
      */
-    function claim(address _user, address[] calldata _tokens, uint256 _maxBondAmount) external {
+    function claim(address _receiver, address[] calldata _tokens, uint256 _maxBondAmount) external {
         Amounts memory claims;
         uint256 balance = EPX.balanceOf(address(this));
         for (uint i = 0; i < _tokens.length; i++) {
             address token = _tokens[i];
             uint256 reward = proxy.claimEmissions(token);
-            _updateIntegrals(_user, token, userBalances[_user][token], totalBalances[token], reward);
-            claims.epx += unclaimedRewards[_user][token].epx;
-            claims.ddd += unclaimedRewards[_user][token].ddd;
-            delete unclaimedRewards[_user][token];
+            _updateIntegrals(msg.sender, token, userBalances[msg.sender][token], totalBalances[token], reward);
+            claims.epx += unclaimedRewards[msg.sender][token].epx;
+            claims.ddd += unclaimedRewards[msg.sender][token].ddd;
+            delete unclaimedRewards[msg.sender][token];
         }
         if (_maxBondAmount > 0) {
             // deposit and bond the claimable EPX, up to `_maxBondAmount`
             uint256 bondAmount = _maxBondAmount > claims.epx ? claims.epx : _maxBondAmount;
-            dEPX.deposit(_user, bondAmount, true);
+            dEPX.deposit(_receiver, bondAmount, true);
             // apply `DDD_LOCK_MULTIPLIER` to earned DDD, porportional to bonded EPX amount
             uint256 dddBonusBase = claims.ddd * bondAmount / claims.epx;
             claims.ddd = dddBonusBase * DDD_LOCK_MULTIPLIER + (claims.ddd - dddBonusBase);
             claims.epx -= bondAmount;
         }
         if (claims.epx > 0) {
-            EPX.safeTransfer(_user, claims.epx);
+            EPX.safeTransfer(_receiver, claims.epx);
         }
         if (claims.ddd > 0) {
-            DDD.mint(_user, claims.ddd);
+            DDD.mint(_receiver, claims.ddd);
         }
     }
 
     /**
-        @notice Claim all third-party incentives earned by `user` from `pool`
+        @notice Claim all third-party incentives earned from `pool`
      */
-    function claimExtraRewards(address user, address pool) external {
+    function claimExtraRewards(address _receiver, address pool) external {
         uint256 total = totalBalances[pool];
-        uint256 balance = userBalances[user][pool];
-        if (total > 0) _updateExtraIntegrals(user, pool, balance, total);
-        uint256 length = extraRewards[pool].length;
+        uint256 balance = userBalances[msg.sender][pool];
+        if (total > 0) _updateExtraIntegrals(msg.sender, pool, balance, total);
+        uint256 length = extraRewards[msg.sender].length;
         for (uint i = 0; i < length; i++) {
-            uint256 amount = unclaimedExtraRewards[user][pool][i];
+            uint256 amount = unclaimedExtraRewards[msg.sender][pool][i];
             if (amount > 0) {
-                unclaimedExtraRewards[user][pool][i] = 0;
-                IERC20(extraRewards[pool][i]).safeTransfer(user, amount);
+                unclaimedExtraRewards[msg.sender][pool][i] = 0;
+                IERC20(extraRewards[pool][i]).safeTransfer(_receiver, amount);
             }
         }
     }
