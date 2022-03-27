@@ -9,7 +9,7 @@ import "./interfaces/ellipsis/IEpxToken.sol";
 import "./interfaces/ellipsis/IV1EpsStaker.sol";
 
 
-contract IncentivizedEpxDepositor is Ownable {
+contract EpxDepositIncentives is Ownable {
 
     IEpxToken public immutable EPX;
     IV1EpsStaker public immutable epsV1Staker;
