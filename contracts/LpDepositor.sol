@@ -36,6 +36,11 @@ contract LpDepositor is Ownable {
     address public depositTokenImplementation;
     address public fixedVoteLpToken;
 
+    // number of EPX an LP must earn via the protocol in order to receive 1 DDD
+    uint256 public immutable DDD_EARN_RATIO;
+    // DDD multiplier if LP locks entire earned EPX balance at time of claim
+    uint256 public immutable DDD_LOCK_MULTIPLIER;
+
     uint256 public pendingBonderFee;
     uint256 public lastBonderFeeTransfer;
 
@@ -61,9 +66,16 @@ contract LpDepositor is Ownable {
     // user -> pool -> unclaimed reward balances
     mapping(address => mapping(address => uint256[])) public unclaimedExtraRewards;
 
-    constructor(IERC20 _EPX, IEllipsisLpStaking _lpStaker) {
+    constructor(
+        IERC20 _EPX,
+        IEllipsisLpStaking _lpStaker,
+        uint256 _dddEarnRatio,
+        uint256 _dddLockMultiplier
+    ) {
         EPX = _EPX;
         lpStaker = _lpStaker;
+        DDD_EARN_RATIO = _dddEarnRatio;
+        DDD_LOCK_MULTIPLIER = _dddLockMultiplier;
     }
 
     function setAddresses(
@@ -105,7 +117,7 @@ contract LpDepositor is Ownable {
                 uint256 reward = totalClaimable[i];
                 reward -= reward * 15 / 100;
                 integral.epx += 1e18 * reward / total;
-                integral.ddd += 1e18 * (reward * 100 / 888) / total;
+                integral.ddd += 1e18 * (reward / DDD_EARN_RATIO) / total;
             }
 
             Amounts storage integralFor = rewardIntegralFor[_user][token];
@@ -168,7 +180,14 @@ contract LpDepositor is Ownable {
         _updateIntegrals(msg.sender, _token, balance, total, reward);
     }
 
-    function claim(address _user, address[] calldata _tokens) external {
+    /**
+        @notice Claim pending EPX and DDD rewards
+        @param _user User to claim for
+        @param _tokens List of LP tokens to claim for
+        @param _maxBondAmount Maximum amount of claimed EPX to convert to bonded dEPX.
+                              Converting to bonded dEPX earns a multiplier on DDD rewards.
+     */
+    function claim(address _user, address[] calldata _tokens, uint256 _maxBondAmount) external {
         Amounts memory claims;
         uint256 balance = EPX.balanceOf(address(this));
         for (uint i = 0; i < _tokens.length; i++) {
@@ -179,8 +198,21 @@ contract LpDepositor is Ownable {
             claims.ddd += unclaimedRewards[_user][token].ddd;
             delete unclaimedRewards[_user][token];
         }
-        if (claims.epx > 0) EPX.safeTransfer(_user, claims.epx);
-        if (claims.ddd > 0) DDD.mint(_user, claims.ddd);
+        if (_maxBondAmount > 0) {
+            // deposit and bond the claimable EPX, up to `_maxBondAmount`
+            uint256 bondAmount = _maxBondAmount > claims.epx ? claims.epx : _maxBondAmount;
+            dEPX.deposit(_user, bondAmount, true);
+            // apply `DDD_LOCK_MULTIPLIER` to earned DDD, porportional to bonded EPX amount
+            uint256 dddBonusBase = claims.ddd * bondAmount / claims.epx;
+            claims.ddd = dddBonusBase * DDD_LOCK_MULTIPLIER + (claims.ddd - dddBonusBase);
+            claims.epx -= bondAmount;
+        }
+        if (claims.epx > 0) {
+            EPX.safeTransfer(_user, claims.epx);
+        }
+        if (claims.ddd > 0) {
+            DDD.mint(_user, claims.ddd);
+        }
     }
 
     /**
@@ -261,7 +293,7 @@ contract LpDepositor is Ownable {
             pendingBonderFee += fee;
 
             integral.epx += 1e18 * reward / total;
-            integral.ddd += 1e18 * (reward * 100 / 888) / total;
+            integral.ddd += 1e18 * (reward / DDD_EARN_RATIO) / total;
             rewardIntegral[pool] = integral;
         }
         Amounts memory integralFor = rewardIntegralFor[user][pool];
@@ -285,8 +317,8 @@ contract LpDepositor is Ownable {
                 pendingBonderFee = 0;
                 // 2/3 of EPX and all DDD given to dEPX bonders
                 EPX.safeTransfer(address(bondedDistributor), pending / 3 * 2);
-                DDD.mint(address(bondedDistributor), pending * 100 / 888);
-                bondedDistributor.notifyFeeAmounts(pending / 3 * 2, pending * 100 / 888);
+                DDD.mint(address(bondedDistributor), pending / DDD_EARN_RATIO);
+                bondedDistributor.notifyFeeAmounts(pending / 3 * 2, pending / DDD_EARN_RATIO);
                 // 1/3 of EPX is converted to dEPX
                 dEPX.deposit(address(this), pending / 3, false);
                 // 1/2 of dEPX given to DDD lockers
