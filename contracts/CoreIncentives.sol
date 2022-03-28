@@ -15,7 +15,7 @@ contract CoreMinter is Ownable {
 
     uint256 public minted;
     uint256 public totalAllocPoints;
-    uint256 public immutable RATIO;
+    uint256 public immutable MINT_PCT;
     uint256 public immutable MAX_DAILY_MINT;
     uint256 public immutable LOCK_WEEKS;
 
@@ -23,13 +23,13 @@ contract CoreMinter is Ownable {
     uint256 public startTime;
 
     constructor(
-        uint256 _coreRatio,
+        uint256 _coreMintPct,
         uint256 _maxDaily,
         uint256 _lockWeeks,
         address[] memory _receivers,
         uint[] memory _allocPoints
     ) public {
-        RATIO = _coreRatio;
+        MINT_PCT = _coreMintPct;
         MAX_DAILY_MINT = _maxDaily;
         LOCK_WEEKS = _lockWeeks;
         for (uint i = 0; i < _receivers.length; i++) {
@@ -55,7 +55,7 @@ contract CoreMinter is Ownable {
 
     function supplyMintLimit() public view returns (uint256) {
         uint256 supply = DDD.totalSupply() - minted;
-        return supply / RATIO;
+        return supply * 100 / (100 - MINT_PCT) - supply;
     }
 
     function timeMintLimit() public view returns (uint256) {
