@@ -6,6 +6,7 @@ interface IIncentiveVoting {
     function startTime() external view returns (uint256);
     function availableVotes(address _user) external view returns (uint256);
     function availableTokenApprovalVotes(address _user, uint256 _voteIndex) external view returns (uint256);
+    function isApproved(address _token) external view returns (bool);
 
     /**
         @notice Allocate votes toward LP tokens to receive emissions in the following week
@@ -26,6 +27,5 @@ interface IIncentiveVoting {
         @param _voteIndex Array index referencing the vote
      */
     function voteForTokenApproval(uint256 _voteIndex, uint256 _yesVotes) external;
-
 
 }

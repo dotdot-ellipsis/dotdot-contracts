@@ -148,14 +148,15 @@ contract DotDotVoting is Ownable {
         if (ratio == 0) {
             uint256 epsVotes = epsVoter.availableVotes(address(proxy));
 
-            // use 5% of the votes for EPX/dEPX pool
-            address[] memory fixedVoteToken = new address[](1);
-            fixedVoteToken[0] = fixedVoteLpToken;
-            uint256[] memory fixedVote = new uint256[](1);
-            fixedVote[0] = epsVotes / 20;
-            proxy.vote(fixedVoteToken, fixedVote);
-            epsVotes -= fixedVote[0];
-
+            if (epsVoter.isApproved(fixedVoteLpToken)) {
+                // use 5% of the votes for EPX/dEPX pool
+                address[] memory fixedVoteToken = new address[](1);
+                fixedVoteToken[0] = fixedVoteLpToken;
+                uint256[] memory fixedVote = new uint256[](1);
+                fixedVote[0] = epsVotes / 20;
+                proxy.vote(fixedVoteToken, fixedVote);
+                epsVotes -= fixedVote[0];
+            }
             uint256 dddVotes = dddLocker.totalWeight() / 1e18;
             ratio = epsVotes / dddVotes;
             epsVoteRatio[week] = ratio;
@@ -198,6 +199,7 @@ contract DotDotVoting is Ownable {
     }
 
     function createTokenApprovalVote(address _token) external returns (uint256 _voteIndex) {
+        require(epsVoter.isApproved(fixedVoteLpToken), "Cannot make vote until dEPX/EPX pool approved");
         require(lastVote[msg.sender] + 86400 * 30 < block.timestamp, "One new vote per 30 days");
         uint256 weight = dddLocker.weeklyWeightOf(msg.sender, getWeek() - 1);
         require(weight >= minWeightForNewTokenApprovalVote(), "User has insufficient DotDot lock weight");
@@ -244,4 +246,17 @@ contract DotDotVoting is Ownable {
         userTokenApprovalVotes[_voteIndex][msg.sender] = usedVotes;
         proxy.voteForTokenApproval(_voteIndex, _yesVotes * vote.ratio);
     }
+
+    /**
+        @notice Create a token approval vote for `fixedVoteLpToken` and vote
+                with all available weight
+        @dev This function is unguarded, but will revert within EPS if the the
+             token is already approved or the last vote was made less than 1
+             week ago.
+     */
+    function createdFixedVoteApprovalVote() external {
+        uint256 voteId = proxy.createTokenApprovalVote(fixedVoteLpToken);
+        proxy.voteForTokenApproval(voteId, type(uint256).max);
+    }
+
 }

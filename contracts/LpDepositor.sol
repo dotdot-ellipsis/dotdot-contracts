@@ -12,6 +12,7 @@ import "./interfaces/dotdot/IDddIncentiveDistributor.sol";
 import "./interfaces/dotdot/IDddLpStaker.sol";
 import "./interfaces/ellipsis/ILpStaker.sol";
 import "./interfaces/ellipsis/IRewardsToken.sol";
+import "./interfaces/ellipsis/IIncentiveVoting.sol";
 
 
 contract LpDepositor is Ownable {
@@ -28,6 +29,7 @@ contract LpDepositor is Ownable {
 
     IERC20 public immutable EPX;
     IEllipsisLpStaking public immutable lpStaker;
+    IIncentiveVoting public immutable epsVoter;
 
     IDddToken public DDD;
     ILockedEPX public dEPX;
@@ -75,6 +77,7 @@ contract LpDepositor is Ownable {
     constructor(
         IERC20 _EPX,
         IEllipsisLpStaking _lpStaker,
+        IIncentiveVoting _epsVoter,
         uint256 _dddEarnRatio,
         uint256 _dddLockMultiplier,
         uint256 _dddLpPercent,
@@ -82,6 +85,7 @@ contract LpDepositor is Ownable {
     ) {
         EPX = _EPX;
         lpStaker = _lpStaker;
+        epsVoter = _epsVoter;
         DDD_EARN_RATIO = _dddEarnRatio;
         DDD_LOCK_MULTIPLIER = _dddLockMultiplier;
         DDD_LP_PERCENT = _dddLpPercent;
@@ -343,11 +347,16 @@ contract LpDepositor is Ownable {
                 dddLpStaker.notifyFeeAmount(pendingDddLp);
 
                 // 1/3 of EPX is converted to dEPX
-                dEPX.deposit(address(this), pendingEpx / 3, false);
-                // 1/2 of dEPX given to DDD lockers
-                dddIncentiveDistributor.depositIncentive(address(0), address(dEPX), pendingEpx / 6);
-                // 1/2 of dEPX as a bribe for the EPX/dEPX pool
-                dddIncentiveDistributor.depositIncentive(fixedVoteLpToken, address(dEPX), pendingEpx / 6);
+                pendingEpx /= 3;
+                dEPX.deposit(address(this), pendingEpx, false);
+                if (epsVoter.isApproved(fixedVoteLpToken)) {
+                    // if `fixedVoteLpToken` is approved for emisisons, 1/2 of the
+                    // dEPX is used as a bribe for votes on that pool
+                    pendingEpx /= 2;
+                    dddIncentiveDistributor.depositIncentive(fixedVoteLpToken, address(dEPX), pendingEpx);
+                }
+                // remaining dEPX is given to all DDD lockers
+                dddIncentiveDistributor.depositIncentive(address(0), address(dEPX), pendingEpx);
             }
         }
     }

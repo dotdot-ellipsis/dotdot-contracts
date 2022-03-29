@@ -59,7 +59,7 @@ def main():
     proxy = EllipsisProxy.deploy(EPX_TOKEN, EPS_LOCKER, EPS_LP_STAKER, EPS_FEE_DISTRIBUTOR, EPS_VOTER, {'from': deployer})
     early_incentives = EpxDepositIncentives.deploy(EPX_TOKEN, EPS_V1_STAKER, EARLY_DEPOSIT_CAP, DDD_MINT_RATIO, START_TIME, {'from': deployer})
     depx = LockedEPX.deploy(EPX_TOKEN, EPS_LOCKER, {'from': deployer})
-    staker = LpDepositor.deploy(EPX_TOKEN, EPS_LP_STAKER, DDD_EARN_RATIO, DDD_LOCK_MULTIPLIER, DDD_LP_PCT, DDD_LP_INITIAL_MINT, {'from': deployer})
+    staker = LpDepositor.deploy(EPX_TOKEN, EPS_LP_STAKER, EPS_VOTER, DDD_EARN_RATIO, DDD_LOCK_MULTIPLIER, DDD_LP_PCT, DDD_LP_INITIAL_MINT, {'from': deployer})
     locker = TokenLocker.deploy(EPS_LOCKER, MAX_LOCK_WEEKS, {'from': deployer})
 
     receivers = list(RECEIVERS)
