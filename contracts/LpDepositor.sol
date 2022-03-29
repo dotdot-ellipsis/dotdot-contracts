@@ -9,6 +9,7 @@ import "./interfaces/dotdot/IDddToken.sol";
 import "./interfaces/dotdot/ILockedEPX.sol";
 import "./interfaces/dotdot/IBondedFeeDistributor.sol";
 import "./interfaces/dotdot/IDddIncentiveDistributor.sol";
+import "./interfaces/dotdot/IDddLpStaker.sol";
 import "./interfaces/ellipsis/ILpStaker.sol";
 import "./interfaces/ellipsis/IRewardsToken.sol";
 
@@ -32,6 +33,7 @@ contract LpDepositor is Ownable {
     ILockedEPX public dEPX;
     IBondedFeeDistributor public bondedDistributor;
     IDddIncentiveDistributor public dddIncentiveDistributor;
+    IDddLpStaker public dddLpStaker;
     IEllipsisProxy public proxy;
     address public depositTokenImplementation;
     address public fixedVoteLpToken;
@@ -40,8 +42,12 @@ contract LpDepositor is Ownable {
     uint256 public immutable DDD_EARN_RATIO;
     // DDD multiplier if LP locks entire earned EPX balance at time of claim
     uint256 public immutable DDD_LOCK_MULTIPLIER;
+    // % of DDD minted for `dddLpStaker` relative to the amount earned by LPs
+    uint256 public immutable DDD_LP_PERCENT;
+    // one-time mint amount of DDD sent to `dddLpStaker`
+    uint256 public immutable DDD_LP_INITIAL_MINT;
 
-    uint256 public pendingBonderFee;
+    uint256 public pendingBonderEpx;
     uint256 public lastBonderFeeTransfer;
 
     // user -> pool -> deposit amount
@@ -70,12 +76,16 @@ contract LpDepositor is Ownable {
         IERC20 _EPX,
         IEllipsisLpStaking _lpStaker,
         uint256 _dddEarnRatio,
-        uint256 _dddLockMultiplier
+        uint256 _dddLockMultiplier,
+        uint256 _dddLpPercent,
+        uint256 _dddInitialMint
     ) {
         EPX = _EPX;
         lpStaker = _lpStaker;
         DDD_EARN_RATIO = _dddEarnRatio;
         DDD_LOCK_MULTIPLIER = _dddLockMultiplier;
+        DDD_LP_PERCENT = _dddLpPercent;
+        DDD_LP_INITIAL_MINT = _dddInitialMint;
     }
 
     function setAddresses(
@@ -84,6 +94,7 @@ contract LpDepositor is Ownable {
         IEllipsisProxy _proxy,
         IBondedFeeDistributor _bondedDistributor,
         IDddIncentiveDistributor _dddIncentiveDistributor,
+        IDddLpStaker _dddLpStaker,
         address _depositTokenImplementation,
         address _fixedVoteLpToken
     ) external onlyOwner {
@@ -93,11 +104,13 @@ contract LpDepositor is Ownable {
 
         bondedDistributor = _bondedDistributor;
         dddIncentiveDistributor = _dddIncentiveDistributor;
+        dddLpStaker = _dddLpStaker;
         depositTokenImplementation = _depositTokenImplementation;
         fixedVoteLpToken = _fixedVoteLpToken;
 
         EPX.approve(address(_dEPX), type(uint256).max);
         _dEPX.approve(address(_dddIncentiveDistributor), type(uint256).max);
+        _DDD.mint(address(dddLpStaker), DDD_LP_INITIAL_MINT);
 
         renounceOwnership();
     }
@@ -290,7 +303,7 @@ contract LpDepositor is Ownable {
         if (reward > 0) {
             uint256 fee = reward * 15 / 100;
             reward -= fee;
-            pendingBonderFee += fee;
+            pendingBonderEpx += fee;
 
             integral.epx += 1e18 * reward / total;
             integral.ddd += 1e18 * (reward / DDD_EARN_RATIO) / total;
@@ -312,19 +325,29 @@ contract LpDepositor is Ownable {
             // we only do this on updates to pools without extra incentives because each
             // operation can be gas intensive
             lastBonderFeeTransfer = block.timestamp;
-            uint256 pending = pendingBonderFee;
-            if (pending > 0) {
-                pendingBonderFee = 0;
-                // 2/3 of EPX and all DDD given to dEPX bonders
-                EPX.safeTransfer(address(bondedDistributor), pending / 3 * 2);
-                DDD.mint(address(bondedDistributor), pending / DDD_EARN_RATIO);
-                bondedDistributor.notifyFeeAmounts(pending / 3 * 2, pending / DDD_EARN_RATIO);
+            uint256 pendingEpx = pendingBonderEpx;
+            if (pendingEpx > 0) {
+                pendingBonderEpx = 0;
+
+                // mint DDD for dEPX bonders and DDD LPs
+                uint256 pendingDdd = pendingEpx / DDD_EARN_RATIO;
+                DDD.mint(address(bondedDistributor), pendingDdd);
+                uint256 pendingDddLp = pendingDdd * 100 / (100 - DDD_LP_PERCENT)  - pendingDdd;
+                DDD.mint(address(dddLpStaker), pendingDddLp);
+
+                // transfer 2/3 of EPX to dEPX bonders
+                EPX.safeTransfer(address(bondedDistributor), pendingEpx / 3 * 2);
+
+                // notify bonded distributor and DDD Lp Staker
+                bondedDistributor.notifyFeeAmounts(pendingEpx / 3 * 2, pendingDdd);
+                dddLpStaker.notifyFeeAmount(pendingDddLp);
+
                 // 1/3 of EPX is converted to dEPX
-                dEPX.deposit(address(this), pending / 3, false);
+                dEPX.deposit(address(this), pendingEpx / 3, false);
                 // 1/2 of dEPX given to DDD lockers
-                dddIncentiveDistributor.depositIncentive(address(0), address(dEPX), pending / 6);
+                dddIncentiveDistributor.depositIncentive(address(0), address(dEPX), pendingEpx / 6);
                 // 1/2 of dEPX as a bribe for the EPX/dEPX pool
-                dddIncentiveDistributor.depositIncentive(fixedVoteLpToken, address(dEPX), pending / 6);
+                dddIncentiveDistributor.depositIncentive(fixedVoteLpToken, address(dEPX), pendingEpx / 6);
             }
         }
     }
