@@ -15,21 +15,31 @@ contract DotDot is IERC20, Ownable {
     mapping(address => mapping(address => uint256)) public override allowance;
     mapping(address => bool) public minters;
 
+    event MintersSet(address[] minters);
+
     constructor() {
         emit Transfer(address(0), msg.sender, 0);
     }
 
     /**
         @notice Approve contracts to mint and renounce ownership
-        @dev In production the only minters should be `LpDepositor` and `SexPartners`
-             Addresses are given via dynamic array to allow extra minters during testing
+        @dev Permission should be given to `LpDepositor, `EpxDepositIncentives` and `CoreMinter`
      */
     function setMinters(address[] calldata _minters) external onlyOwner {
         for (uint256 i = 0; i < _minters.length; i++) {
             minters[_minters[i]] = true;
         }
 
+        emit MintersSet(_minters);
         renounceOwnership();
+    }
+
+    function mint(address _to, uint256 _value) external returns (bool) {
+        require(minters[msg.sender], "Not a minter");
+        balanceOf[_to] += _value;
+        totalSupply += _value;
+        emit Transfer(address(0), _to, _value);
+        return true;
     }
 
     function approve(address _spender, uint256 _value) external override returns (bool) {
@@ -78,14 +88,6 @@ contract DotDot is IERC20, Ownable {
             allowance[_from][msg.sender] -= _value;
         }
         _transfer(_from, _to, _value);
-        return true;
-    }
-
-    function mint(address _to, uint256 _value) external returns (bool) {
-        require(minters[msg.sender], "Not a minter");
-        balanceOf[_to] += _value;
-        totalSupply += _value;
-        emit Transfer(address(0), _to, _value);
         return true;
     }
 
