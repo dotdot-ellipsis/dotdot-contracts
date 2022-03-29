@@ -1,14 +1,10 @@
 pragma solidity 0.8.12;
 
+import "./dependencies/Ownable.sol";
 import "./interfaces/IERC20.sol";
 
 
-contract StakingRewardsPenalty {
-
-    uint256 public periodFinish;
-    uint256 public rewardRate;
-    uint256 public lastUpdateTime;
-    uint256 public rewardPerTokenStored;
+contract DddLpStaker is Ownable {
 
     struct Deposit {
         uint256 timestamp;
@@ -21,39 +17,46 @@ contract StakingRewardsPenalty {
         Deposit[] deposits;
     }
 
-    IERC20 public stakingToken;
-    IERC20 public rewardToken;
+    uint256 public periodFinish;
+    uint256 public rewardRate;
+    uint256 public lastUpdateTime;
+    uint256 public rewardPerTokenStored;
+
+    uint256 constant WEEK = 604800;
+    uint256 public constant rewardsDuration = WEEK;
 
     uint256 public totalSupply;
+    uint256 public immutable startTime;
 
-    mapping (address => UserBalance) userBalances;
-
-    uint256 public constant rewardsDuration = 86400 * 7;
-
-    uint256 public startTime;
-    address public feeReceiver;
+    IERC20 public stakingToken;
+    IERC20 public rewardToken;
+    address public lpDepositor;
     address public treasury;
 
     mapping(address => uint256) public userRewardPerTokenPaid;
     mapping(address => uint256) public rewards;
+    mapping (address => UserBalance) userBalances;
 
     event RewardAdded(uint256 reward);
-    event Staked(address indexed user, uint256 stakeAmount, uint256 feeAmount);
-    event Withdrawn(address indexed user, uint256 withdrawAmount, uint256 feeAmount);
+    event Staked(address indexed caller, address indexed receiver, uint256 stakeAmount, uint256 feeAmount);
+    event Withdrawn(address indexed user, address indexed receiver, uint256 withdrawAmount, uint256 feeAmount);
     event FeeProcessed(uint256 lpTokensWithdrawn, uint256 burnAmount, uint256 rewardAmount);
-    event RewardPaid(address indexed user, uint256 reward);
-    event Recovered(address token, uint256 amount);
+    event RewardPaid(address indexed user, address indexed receiver, uint256 reward);
 
-
-    constructor(
-        IERC20 _stakingToken,
-        address _feeReceiver,
-        address _treasury
-    ) {
-        stakingToken = _stakingToken;
-        feeReceiver = _feeReceiver;
-        treasury = _treasury;
+    constructor() {
         startTime = block.timestamp;
+    }
+
+    function setAddresses(
+        IERC20 _stakingToken,
+        address _lpDepositor,
+        address _treasury
+    ) external onlyOwner {
+        lpDepositor = _lpDepositor;
+        stakingToken = _stakingToken;
+        treasury = _treasury;
+
+        renounceOwnership();
     }
 
     function balanceOf(address account) external view returns (uint256) {
@@ -78,37 +81,45 @@ contract StakingRewardsPenalty {
         if (totalSupply == 0) {
             return rewardPerTokenStored;
         }
-        return rewardPerTokenStored + (lastTimeRewardApplicable() - lastUpdateTime) * rewardRate * 1e18 / totalSupply;
+        uint256 duration = lastTimeRewardApplicable() - lastUpdateTime;
+        return rewardPerTokenStored + duration * rewardRate * 1e18 / totalSupply;
     }
 
-    function earned(address account) public view returns (uint256) {
-        return userBalances[account].total * (rewardPerToken() - userRewardPerTokenPaid[account]) / 1e18 + rewards[account];
+    function claimable(address account) public view returns (uint256) {
+        uint256 delta = rewardPerToken() - userRewardPerTokenPaid[account];
+        return userBalances[account].total * delta / 1e18 + rewards[account];
     }
 
     function getRewardForDuration() external view returns (uint256) {
         return rewardRate * rewardsDuration;
     }
 
-    // current deposit fee percent, given as an integer out of 10000
-    // the deposit fee is fixed, starting at 2% and reducing by 0.5%
-    // every 13 weeks until becoming 0 at one year after launch
+    /**
+        @notice The current deposit fee percent as an integer out of 10000
+        @dev The deposit fee is fixed, starting at 2% and reducing by 0.25%
+             every 8 weeks until reaching 0
+     */
     function depositFee() public view returns (uint256) {
         uint256 timeSinceStart = block.timestamp - startTime;
-        if (timeSinceStart >= 31449600) return 0;
-        return 200 - (timeSinceStart / 7862400 * 50);
+        if (timeSinceStart >= WEEK * 8 * 8) return 0;
+        return 200 - (timeSinceStart / (WEEK * 8) * 25);
     }
 
-    // exact fee amount paid when depositing `amount`
+    /**
+        @notice Fee amount paid when depositing `amount` based on the current deposit fee
+     */
     function depositFeeOnAmount(uint256 amount) public view returns (uint256) {
         uint256 fee = depositFee();
         return amount * fee / 10000;
     }
 
-    // exact fee amount paid when `account` withdraws `amount`
-    // the withdrawal fee is variable, starting at 8% and reducing by 1% for each week that
-    // the funds have been deposited. withdrawals are always made starting from the oldest
-    // deposit, in order to minimize the fee paid.
-    function withdrawFeeOnAmount(address account, uint256 amount) public view returns (uint256 feeAmount) {
+    /**
+        @notice Fee amount paid for `account` to deposit `amount`
+        @dev The withdrawal fee is variable, starting at 8% and reducing by 1% each week
+             that the funds have been deposited. Withdrawals are always made starting from
+             the oldest deposit, in order to minimize the fee paid.
+     */
+    function withdrawFeeOnAmount(address account, uint256 amount) external view returns (uint256 feeAmount) {
         UserBalance storage user = userBalances[account];
         require(user.total >= amount, "Amount exceeds user deposit");
 
@@ -135,12 +146,20 @@ contract StakingRewardsPenalty {
         revert();
     }
 
-
-    // `amount` is the total amount to deposit, inclusive of any fee amount to be paid
-    // the final deposited balance ay be up to 2% less than `amount` depending upon the
-    // current deposit fee
-    function stake(uint256 amount) external updateReward(msg.sender) {
+    /**
+        @notice Deposit LP tokens
+        @dev `amount` is the total amount to transfer from the caller, inclusive of
+             the deposit fee. the final deposited balance may be up to 2% less than
+             the given amount.
+        @param receiver Address to credit for the deposit
+        @param amount Amount to deposit (inclusive of fee)
+        @param claim If true, also claims any pending rewards. Cannot be true when
+                     the caller is not the receiver.
+     */
+    function deposit(address receiver, uint256 amount, bool claim) external {
+        if (claim) require (msg.sender == receiver, "Cannot trigger claim for another user");
         require(amount > 0, "Cannot stake 0");
+        _updateReward(receiver, receiver, claim);
         stakingToken.transferFrom(msg.sender, address(this), amount);
 
         // apply deposit fee, if any
@@ -150,8 +169,8 @@ contract StakingRewardsPenalty {
             amount -= feeAmount;
         }
 
-        totalSupply -= amount;
-        UserBalance storage user = userBalances[msg.sender];
+        totalSupply += amount;
+        UserBalance storage user = userBalances[receiver];
         user.total += amount;
         uint256 timestamp = block.timestamp / 86400 * 86400;
         uint256 length = user.deposits.length;
@@ -160,15 +179,22 @@ contract StakingRewardsPenalty {
         } else {
             user.deposits[length-1].amount += amount;
         }
-        emit Staked(msg.sender, amount, feeAmount);
+        emit Staked(msg.sender, receiver, amount, feeAmount);
     }
 
-    /// `amount` is the total to withdraw inclusive of any fee amounts to be paid.
-    /// the final balance received may be up to 8% less than `amount` depending upon
-    /// how recently the caller deposited
-    function withdraw(uint256 amount) public updateReward(msg.sender) {
+    /**
+        @notice Withdraw LP tokens
+        @dev `amount` is the total amount to deduct from the caller's balance,
+             inclusive of the withdrawal fee. the final received amount may be
+             up to 8% less than the given amount.
+        @param receiver Address to send the withdrawn tokens to
+        @param amount Amount to withdraw (inclusive of fee)
+        @param claim If true, also claims any pending rewards
+     */
+    function withdraw(address receiver, uint256 amount, bool claim) public {
         require(amount > 0, "Cannot withdraw 0");
-        totalSupply += amount;
+        _updateReward(msg.sender, receiver, claim);
+        totalSupply -= amount;
 
         UserBalance storage user = userBalances[msg.sender];
         user.total -= amount;
@@ -199,30 +225,34 @@ contract StakingRewardsPenalty {
             }
         }
 
-        stakingToken.transfer(msg.sender, amountAfterFee);
+        stakingToken.transfer(receiver, amountAfterFee);
         uint256 feeAmount = amount - amountAfterFee;
         if (feeAmount > 0) {
             stakingToken.transfer(treasury, feeAmount);
         }
-        emit Withdrawn(msg.sender, amount, feeAmount);
+        emit Withdrawn(msg.sender, receiver, amount, feeAmount);
     }
 
-    function getReward() public updateReward(msg.sender) {
-        uint256 reward = rewards[msg.sender];
-        if (reward > 0) {
-            rewards[msg.sender] = 0;
-            rewardToken.transfer(msg.sender, reward);
-            emit RewardPaid(msg.sender, reward);
-        }
+    /**
+        @notice Claim pending rewards for the caller
+        @param receiver Address to transfer claimed rewards to
+     */
+    function claim(address receiver) external {
+        _updateReward(msg.sender, receiver, true);
     }
 
-    function exit() external {
-        withdraw(userBalances[msg.sender].total);
-        getReward();
+    /**
+        @notice Claim pending rewards and withdraw all tokens
+        @param receiver Address to transfer LP tokens and rewards to
+     */
+    function exit(address receiver) external {
+        withdraw(receiver, userBalances[msg.sender].total, true);
     }
 
-    function notifyFeeAmount(uint256 amount) external {
-        // TODO guard it, integrate into LP depositor
+    function notifyFeeAmount(uint256 amount) external returns (bool) {
+        require(msg.sender == lpDepositor);
+        rewardPerTokenStored = rewardPerToken();
+
         if (block.timestamp >= periodFinish) {
             rewardRate = amount / rewardsDuration;
         } else {
@@ -233,15 +263,23 @@ contract StakingRewardsPenalty {
         lastUpdateTime = block.timestamp;
         periodFinish = block.timestamp + rewardsDuration;
         emit RewardAdded(amount);
+
+        return true;
     }
 
-    modifier updateReward(address account) {
+    function _updateReward(address account, address receiver, bool claim) internal {
         rewardPerTokenStored = rewardPerToken();
         lastUpdateTime = lastTimeRewardApplicable();
-        if (account != address(0)) {
-            rewards[account] = earned(account);
-            userRewardPerTokenPaid[account] = rewardPerTokenStored;
+
+        uint256 pending = claimable(account);
+        if (pending > 0) {
+            if (claim) {
+                rewardToken.transfer(receiver, pending);
+                emit RewardPaid(account, receiver, pending);
+                pending = 0;
+            }
+            rewards[account] = pending;
         }
-        _;
+        userRewardPerTokenPaid[account] = rewardPerTokenStored;
     }
 }
