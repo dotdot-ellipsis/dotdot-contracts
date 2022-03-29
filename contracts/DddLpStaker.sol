@@ -37,11 +37,10 @@ contract DddLpStaker is Ownable {
     mapping(address => uint256) public rewards;
     mapping (address => UserBalance) userBalances;
 
-    event RewardAdded(uint256 reward);
-    event Staked(address indexed caller, address indexed receiver, uint256 stakeAmount, uint256 feeAmount);
+    event FeeAdded(uint256 reward);
+    event Deposited(address indexed caller, address indexed receiver, uint256 stakeAmount, uint256 feeAmount);
     event Withdrawn(address indexed user, address indexed receiver, uint256 withdrawAmount, uint256 feeAmount);
-    event FeeProcessed(uint256 lpTokensWithdrawn, uint256 burnAmount, uint256 rewardAmount);
-    event RewardPaid(address indexed user, address indexed receiver, uint256 reward);
+    event FeeClaimed(address indexed user, address indexed receiver, uint256 reward);
 
     constructor() {
         startTime = block.timestamp;
@@ -179,7 +178,7 @@ contract DddLpStaker is Ownable {
         } else {
             user.deposits[length-1].amount += amount;
         }
-        emit Staked(msg.sender, receiver, amount, feeAmount);
+        emit Deposited(msg.sender, receiver, amount, feeAmount);
     }
 
     /**
@@ -262,7 +261,7 @@ contract DddLpStaker is Ownable {
         }
         lastUpdateTime = block.timestamp;
         periodFinish = block.timestamp + rewardsDuration;
-        emit RewardAdded(amount);
+        emit FeeAdded(amount);
 
         return true;
     }
@@ -275,7 +274,7 @@ contract DddLpStaker is Ownable {
         if (pending > 0) {
             if (claim) {
                 rewardToken.transfer(receiver, pending);
-                emit RewardPaid(account, receiver, pending);
+                emit FeeClaimed(account, receiver, pending);
                 pending = 0;
             }
             rewards[account] = pending;

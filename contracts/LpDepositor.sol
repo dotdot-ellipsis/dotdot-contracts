@@ -74,6 +74,46 @@ contract LpDepositor is Ownable {
     // user -> pool -> unclaimed reward balances
     mapping(address => mapping(address => uint256[])) public unclaimedExtraRewards;
 
+    event Deposit(
+        address indexed caller,
+        address indexed receiver,
+        address indexed token,
+        uint256 amount
+    );
+    event Withdraw(
+        address indexed caller,
+        address indexed receiver,
+        address indexed token,
+        uint256 amount
+    );
+    event ClaimedAndBonded(
+        address indexed caller,
+        address indexed receiver,
+        uint256 bondAmount
+    );
+    event Claimed(
+        address indexed caller,
+        address indexed receiver,
+        address[] tokens,
+        uint256 epxAmount,
+        uint256 dddAmount
+    );
+    event ClaimedExtraRewards(
+        address indexed caller,
+        address indexed receiver,
+        address token
+    );
+    event ExtraRewardsUpdated(
+        address indexed token,
+        address[] rewards
+    );
+    event TransferDeposit(
+        address indexed token,
+        address indexed from,
+        address indexed to,
+        uint256 amount
+    );
+
     constructor(
         IERC20 _EPX,
         IEllipsisLpStaking _lpStaker,
@@ -181,6 +221,7 @@ contract LpDepositor is Ownable {
             depositToken = _deployDepositToken(_token);
         }
         IDepositToken(depositToken).mint(_user, _amount);
+        emit Deposit(msg.sender, _user, _token, _amount);
     }
 
     function withdraw(address _receiver, address _token, uint256 _amount) external {
@@ -195,6 +236,7 @@ contract LpDepositor is Ownable {
 
         uint256 reward = proxy.withdraw(_receiver, _token, _amount);
         _updateIntegrals(msg.sender, _token, balance, total, reward);
+        emit Withdraw(msg.sender, _receiver, _token, _amount);
     }
 
     /**
@@ -219,6 +261,7 @@ contract LpDepositor is Ownable {
             // deposit and bond the claimable EPX, up to `_maxBondAmount`
             uint256 bondAmount = _maxBondAmount > claims.epx ? claims.epx : _maxBondAmount;
             dEPX.deposit(_receiver, bondAmount, true);
+            emit ClaimedAndBonded(msg.sender, _receiver, bondAmount);
             // apply `DDD_LOCK_MULTIPLIER` to earned DDD, porportional to bonded EPX amount
             uint256 dddBonusBase = claims.ddd * bondAmount / claims.epx;
             claims.ddd = dddBonusBase * DDD_LOCK_MULTIPLIER + (claims.ddd - dddBonusBase);
@@ -230,6 +273,7 @@ contract LpDepositor is Ownable {
         if (claims.ddd > 0) {
             DDD.mint(_receiver, claims.ddd);
         }
+        emit Claimed(msg.sender, _receiver, _tokens, claims.epx, claims.ddd);
     }
 
     /**
@@ -247,6 +291,7 @@ contract LpDepositor is Ownable {
                 IERC20(extraRewards[pool][i]).safeTransfer(_receiver, amount);
             }
         }
+        emit ClaimedExtraRewards(msg.sender, _receiver, pool);
     }
 
     /**
@@ -260,6 +305,7 @@ contract LpDepositor is Ownable {
         for (uint256 i = rewards.length; i < count; i ++) {
             rewards.push(IRewardsToken(pool).rewardTokens(i));
         }
+        emit ExtraRewardsUpdated(pool, rewards);
     }
 
     function transferDeposit(address _token, address _from, address _to, uint256 _amount) external returns (bool) {
@@ -278,7 +324,7 @@ contract LpDepositor is Ownable {
         balance = userBalances[_to][_token];
         _updateIntegrals(_to, _token, balance, total - _amount, 0);
         userBalances[_to][_token] = balance + _amount;
-        // emit TransferDeposit(_token, _from, _to, _amount);  TODO
+        emit TransferDeposit(_token, _from, _to, _amount);
         return true;
     }
 

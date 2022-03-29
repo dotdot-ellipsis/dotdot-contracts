@@ -27,6 +27,9 @@ contract LockedEPX is IERC20, Ownable {
     uint256 immutable MAX_LOCK_WEEKS;
     uint256 lastLockWeek;
 
+    event Deposit(address indexed caller, address indexed receiver, uint256 amount, bool bond);
+    event ExtendLocks(uint256 lastLockWeek);
+
     constructor(
         IERC20 _EPX,
         ITokenLocker _epsLocker
@@ -119,6 +122,7 @@ contract LockedEPX is IERC20, Ownable {
             balanceOf[_receiver] += _amount;
             emit Transfer(address(0), _receiver, _amount);
         }
+        emit Deposit(msg.sender, _receiver, _amount, _bond);
         return true;
     }
 
@@ -136,6 +140,7 @@ contract LockedEPX is IERC20, Ownable {
                 if (week < MAX_LOCK_WEEKS) proxy.extendLock(amount, week);
             }
             lastLockWeek = block.timestamp / WEEK;
+            emit ExtendLocks(block.timestamp / WEEK);
         }
         return true;
     }

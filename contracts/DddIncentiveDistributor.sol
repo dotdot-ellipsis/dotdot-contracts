@@ -43,17 +43,18 @@ contract DddIncentiveDistributor is Ownable {
     uint256 public startTime;
     uint256 constant WEEK = 86400 * 7;
 
-    // TODO events
-    event FeesReceived(
-        address indexed caller,
+    event IncentiveReceived(
+        address caller,
+        address indexed lpToken,
         address indexed token,
         uint256 indexed week,
         uint256 amount
     );
-    event FeesClaimed(
+    event IncentiveClaimed(
         address caller,
         address indexed account,
-        address indexed receiver,
+        address receiver,
+        address indexed lpToken,
         address indexed token,
         uint256 amount
     );
@@ -115,7 +116,7 @@ contract DddIncentiveDistributor is Ownable {
             received = IERC20(_incentive).balanceOf(address(this)) - received;
             uint256 week = getWeek();
             weeklyIncentiveAmounts[_lpToken][_incentive][week] += received;
-            //emit FeesReceived(msg.sender, _bribe, week, _amount);
+            emit IncentiveReceived(msg.sender, _lpToken, _incentive, week, _amount);
         }
         return true;
     }
@@ -163,7 +164,7 @@ contract DddIncentiveDistributor is Ownable {
             (claimedAmounts[i], stream) = _getClaimable(_user, _lpToken, token);
             activeUserStream[_user][_lpToken][token] = stream;
             IERC20(token).safeTransfer(receiver, claimedAmounts[i]);
-            //emit FeesClaimed(msg.sender, _user, receiver, token, claimedAmounts[i]);
+            emit IncentiveClaimed(msg.sender, _user, receiver, _lpToken, token, claimedAmounts[i]);
         }
         return claimedAmounts;
     }

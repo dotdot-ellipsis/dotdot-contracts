@@ -57,6 +57,16 @@ contract DotDotVoting is Ownable {
         uint256 userVotesUsed,
         uint256 totalUserVotes
     );
+    event CreatedTokenApprovalVote(
+        address indexed user,
+        uint256 voteIndex,
+        address token
+    );
+    event VotedForTokenApproval(
+        address indexed voter,
+        uint256 voteIndex,
+        uint256 yesVotes
+    );
 
     constructor(
         IIncentiveVoting _epsVoter,
@@ -203,7 +213,8 @@ contract DotDotVoting is Ownable {
         require(lastVote[msg.sender] + 86400 * 30 < block.timestamp, "One new vote per 30 days");
         uint256 weight = dddLocker.weeklyWeightOf(msg.sender, getWeek() - 1);
         require(weight >= minWeightForNewTokenApprovalVote(), "User has insufficient DotDot lock weight");
-        return proxy.createTokenApprovalVote(_token);
+        _voteIndex = proxy.createTokenApprovalVote(_token);
+        emit CreatedTokenApprovalVote(msg.sender, _voteIndex, _token);
     }
 
     function availableTokenApprovalVotes(address _user, uint256 _voteIndex) external view returns (uint256) {
@@ -244,7 +255,9 @@ contract DotDotVoting is Ownable {
         require(usedVotes <= totalVotes, "Exceeds available votes");
 
         userTokenApprovalVotes[_voteIndex][msg.sender] = usedVotes;
+        _yesVotes *= vote.ratio;
         proxy.voteForTokenApproval(_voteIndex, _yesVotes * vote.ratio);
+        emit VotedForTokenApproval(msg.sender, _voteIndex, _yesVotes);
     }
 
     /**
@@ -257,6 +270,7 @@ contract DotDotVoting is Ownable {
     function createdFixedVoteApprovalVote() external {
         uint256 voteId = proxy.createTokenApprovalVote(fixedVoteLpToken);
         proxy.voteForTokenApproval(voteId, type(uint256).max);
+        emit CreatedTokenApprovalVote(msg.sender, voteId, fixedVoteLpToken);
     }
 
 }

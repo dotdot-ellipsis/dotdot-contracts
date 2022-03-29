@@ -38,6 +38,18 @@ contract EpxDepositIncentives is Ownable {
     uint256 public immutable EPS_MIGRATION_RATIO;
     uint256 constant WEEK = 86400 * 7;
 
+    event Deposit(
+        address indexed caller,
+        address indexed receiver,
+        uint256 epxReceived,
+        uint256 dddMinted
+    );
+    event RegisteredLegacyLocks(
+        address indexed caller,
+        address indexed user,
+        uint256 reservedAmount
+    );
+
     constructor(
         IEpxToken _EPX,
         IV1EpsStaker _epsV1Staker,
@@ -137,6 +149,7 @@ contract EpxDepositIncentives is Ownable {
         for (uint i = 4; i > 0; i--) {
             dddLocker.lock(_receiver, amount, i * 4);
         }
+        emit Deposit(msg.sender, _receiver, _amount, amount * 4);
     }
 
     /**
@@ -154,14 +167,17 @@ contract EpxDepositIncentives is Ownable {
         require(lockData.length > 0, "No legacy locks");
         require(!isRegistered[_user], "Already registered");
 
+
+        totalLocked *= EPS_MIGRATION_RATIO;
+        reservedDeposits += totalLocked;
         isRegistered[_user] = true;
-        reservedDeposits += totalLocked * EPS_MIGRATION_RATIO;
         for(uint i = 0; i < lockData.length; i++) {
             uint256 amount = lockData[i].amount * EPS_MIGRATION_RATIO;
             uint256 week = (lockData[i].unlockTime - startTime) / WEEK;
             totalWeeklyReservedDeposits[week] += amount;
             userWeeklyReservedDeposits[_user][week] = amount;
         }
+        emit RegisteredLegacyLocks(msg.sender, _user, totalLocked);
     }
 
     /**
