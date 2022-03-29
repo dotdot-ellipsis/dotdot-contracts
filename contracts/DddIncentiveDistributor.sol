@@ -4,6 +4,7 @@ import "./dependencies/Ownable.sol";
 import "./dependencies/SafeERC20.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/dotdot/IDotDotVoting.sol";
+import "./interfaces/ellipsis/IIncentiveVoting.sol";
 import "./interfaces/ellipsis/ITokenLocker.sol";
 
 
@@ -34,6 +35,8 @@ contract DddIncentiveDistributor is Ownable {
     // when set to true, other accounts cannot call `claim` on behalf of an account
     mapping(address => bool) public blockThirdPartyActions;
 
+    IIncentiveVoting public immutable epsVoter;
+
     ITokenLocker public dddLocker;
     IDotDotVoting public dddVoter;
 
@@ -54,6 +57,10 @@ contract DddIncentiveDistributor is Ownable {
         address indexed token,
         uint256 amount
     );
+
+    constructor(IIncentiveVoting _epsVoter) {
+        epsVoter = _epsVoter;
+    }
 
     function setAddresses(ITokenLocker _dddLocker, IDotDotVoting _dddVoter) external onlyOwner {
         dddLocker = _dddLocker;
@@ -97,7 +104,9 @@ contract DddIncentiveDistributor is Ownable {
     {
         if (_amount > 0) {
             if (!seenTokens[_lpToken][_incentive]) {
-                // TODO validate that this is actually an approved pool
+                if (_lpToken != address(0)) {
+                    require(epsVoter.isApproved(_lpToken), "lpToken not approved for incentives");
+                }
                 seenTokens[_lpToken][_incentive] = true;
                 incentiveTokens[_lpToken].push(_incentive);
             }

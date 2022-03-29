@@ -336,7 +336,7 @@ contract LpDepositor is Ownable {
                 // mint DDD for dEPX bonders and DDD LPs
                 uint256 pendingDdd = pendingEpx / DDD_EARN_RATIO;
                 DDD.mint(address(bondedDistributor), pendingDdd);
-                uint256 pendingDddLp = pendingDdd * 100 / (100 - DDD_LP_PERCENT)  - pendingDdd;
+                uint256 pendingDddLp = pendingDdd * 100 / (100 - DDD_LP_PERCENT) - pendingDdd;
                 DDD.mint(address(dddLpStaker), pendingDddLp);
 
                 // transfer 2/3 of EPX to dEPX bonders

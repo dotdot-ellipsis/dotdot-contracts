@@ -50,10 +50,9 @@ def main():
     deployer = accounts.add()
 
     bonded_distributor = BondedFeeDistributor.deploy(EPX_TOKEN, EPS_FEE_DISTRIBUTOR, {'from': deployer})
-    ddd_distributor = DddIncentiveDistributor.deploy({'from': deployer})
+    ddd_distributor = DddIncentiveDistributor.deploy(EPS_VOTER, {'from': deployer})
     ddd_lp_staker = DddLpStaker.deploy({'from': deployer})
     token = DotDot.deploy({'from': deployer})
-
     deposit_token = DepositToken.deploy({'from': deployer})
     voter = DotDotVoting.deploy(EPS_VOTER, EPS_LOCKER, {'from': deployer})
     proxy = EllipsisProxy.deploy(EPX_TOKEN, EPS_LOCKER, EPS_LP_STAKER, EPS_FEE_DISTRIBUTOR, EPS_VOTER, {'from': deployer})
