@@ -22,10 +22,10 @@ contract TokenLocker is Ownable {
     // `weeklyTotalWeight` and `weeklyWeightOf` track the total lock weight for each week,
     // calculated as the sum of [number of tokens] * [weeks to unlock] for all active locks.
     // The array index corresponds to the number of the epoch week.
-    uint128[9362] public weeklyTotalWeight;
+    uint128[65535] public weeklyTotalWeight;
 
     // `weeklyLockData` tracks the total lock weights and unlockable token balances for each user.
-    mapping(address => LockData[9362]) weeklyLockData;
+    mapping(address => LockData[65535]) weeklyLockData;
 
     // `withdrawnUntil` tracks the most recent week for which each user has withdrawn their
     // expired token locks. Unlock values in `weeklyLockData` with an index less than the related
@@ -158,15 +158,15 @@ contract TokenLocker is Ownable {
         uint256 length = 0;
         uint256 week = getWeek();
         uint256[] memory unlocks = new uint256[](MAX_LOCK_WEEKS);
-        for (uint256 i = week + 1; i < week + MAX_LOCK_WEEKS + 1; i++) {
-            unlocks[i] = weeklyLockData[_user][i].unlock;
+        for (uint256 i = 0; i < MAX_LOCK_WEEKS; i++) {
+            unlocks[i] = weeklyLockData[_user][i + week + 1].unlock;
             if (unlocks[i] > 0) length++;
         }
         lockData = new uint256[2][](length);
         uint256 x = 0;
-        for (uint256 i = week + 1; i < week + MAX_LOCK_WEEKS + 1; i++) {
+        for (uint256 i = 0; i < MAX_LOCK_WEEKS; i++) {
             if (unlocks[i] > 0) {
-                lockData[x] = [i - week, unlocks[i]];
+                lockData[x] = [i + 1, unlocks[i]];
                 x++;
             }
         }
@@ -230,7 +230,7 @@ contract TokenLocker is Ownable {
         require(_weeks < _newWeeks, "newWeeks must be greater than weeks");
         require(_amount > 0, "Amount must be nonzero");
 
-        LockData[9362] storage data = weeklyLockData[msg.sender];
+        LockData[65535] storage data = weeklyLockData[msg.sender];
         uint256 start = getWeek();
         uint256 end = start + _weeks;
         data[end].unlock -= uint128(_amount);
@@ -292,7 +292,7 @@ contract TokenLocker is Ownable {
     function streamableBalance(address _user) public view returns (uint256) {
         uint256 finishedWeek = getWeek();
 
-        LockData[9362] storage data = weeklyLockData[_user];
+        LockData[65535] storage data = weeklyLockData[_user];
         uint256 amount;
 
         for (
@@ -335,7 +335,7 @@ contract TokenLocker is Ownable {
     ) internal {
         uint256 oldEnd = _start + _oldRounds;
         uint256 end = _start + _rounds;
-        LockData[9362] storage data = weeklyLockData[_user];
+        LockData[65535] storage data = weeklyLockData[_user];
         for (uint256 i = _start; i < end; i++) {
             uint256 amount = _amount * (end - i);
             if (i < oldEnd) {
