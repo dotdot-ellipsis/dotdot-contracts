@@ -147,6 +147,49 @@ contract BondedFeeDistributor is Ownable {
     }
 
     /**
+        @notice The total amount of bonded tokens held in the contract for `_user`
+        @dev Does not include any balance in an active unbonding stream
+     */
+    function bondedBalance(address _user) external view returns (uint256) {
+        uint256 length = weeklyUserBalance[_user].length;
+        if (length == 0) return 0;
+        return weeklyUserBalance[_user][length-1];
+    }
+
+    /**
+        @notice The amount of bonded tokens for `_user` which have passed the
+                minimum bond duration and so could begin unbonding immediately.
+     */
+    function unbondableBalance(address _user) public view returns (uint256) {
+        uint balance;
+        DepositData storage data = userDeposits[_user];
+        for (uint256 i = data.index; i < data.deposits.length; i++) {
+            Deposit storage dep = data.deposits[i];
+            if (dep.timestamp + MIN_BOND_DURATION > block.timestamp) break;
+            balance += dep.amount;
+        }
+        return balance;
+    }
+
+    /**
+        @notice Get info on the current unbonding stream for a user
+        @return claimable Streamable balance that can currently be withdrawn
+        @return total Total balance left in the stream
+     */
+    function streamingBalances(address _user) public view returns (uint256 claimable, uint256 total)
+    {
+        StreamData storage stream = exitStream[_user];
+        if (stream.start == 0) return (0, 0);
+        uint256 remaining = stream.amount - stream.claimed;
+        if (stream.start + UNBOND_STREAM_DURATION < block.timestamp) {
+            return (remaining, remaining);
+        } else {
+            uint256 claimable = stream.amount * (block.timestamp - stream.start) / UNBOND_STREAM_DURATION;
+            return (claimable - stream.claimed, remaining);
+        }
+    }
+
+    /**
         @notice Claim accrued protocol fees according to a locked balance in `TokenLocker`.
         @dev Fees are claimable up to the end of the previous week. Claimable fees from more
              than one week ago are released immediately, fees from the previous week are streamed.
@@ -235,21 +278,6 @@ contract BondedFeeDistributor is Ownable {
     }
 
     /**
-        @notice The amount of bonded tokens for `_user` which have passed the
-                minimum bond duration and so could begin unbonding immediately.
-     */
-    function unbondableBalance(address _user) public view returns (uint256) {
-        uint balance;
-        DepositData storage data = userDeposits[_user];
-        for (uint256 i = data.index; i < data.deposits.length; i++) {
-            Deposit storage dep = data.deposits[i];
-            if (dep.timestamp + MIN_BOND_DURATION > block.timestamp) break;
-            balance += dep.amount;
-        }
-        return balance;
-    }
-
-    /**
         @notice Initiate an unbonding stream, allowing withdrawal of bonded tokens over the
                 unbonding duration.
         @dev If there is already an active unbonding stream, any unclaimed balance is added
@@ -293,29 +321,13 @@ contract BondedFeeDistributor is Ownable {
     }
 
     /**
-        @notice The balance of `_user` that has finished unbonding and may
-                be withdrawn immediately by calling `withdrawUnbondedTokens`.
-     */
-    function withdrawableBalance(address _user) public view returns (uint256)
-    {
-        StreamData storage stream = exitStream[_user];
-        if (stream.start == 0) return 0;
-        if (stream.start + UNBOND_STREAM_DURATION < block.timestamp) {
-            return stream.amount - stream.claimed;
-        } else {
-            uint256 claimable = stream.amount * (block.timestamp - stream.start) / UNBOND_STREAM_DURATION;
-            return claimable - stream.claimed;
-        }
-    }
-
-    /**
         @notice Withdraw tokens that have finished unbonding.
      */
     function withdrawUnbondedTokens(address _receiver) external returns (bool) {
         StreamData storage stream = exitStream[msg.sender];
         uint256 amount;
         if (stream.start > 0) {
-            amount = withdrawableBalance(msg.sender);
+            (amount,) = streamingBalances(msg.sender);
             if (stream.start + UNBOND_STREAM_DURATION < block.timestamp) {
                 delete exitStream[msg.sender];
             } else {
