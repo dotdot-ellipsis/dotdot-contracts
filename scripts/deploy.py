@@ -84,7 +84,7 @@ def main():
     ddd_lp_staker.setAddresses(ddd_pool, staker, token, {'from': deployer})
     voter.setAddresses(locker, depx_pool, proxy, {'from': deployer})
     proxy.setAddresses(depx, staker, bonded_distributor, voter, {'from': deployer})
-    early_incentives.setAddresses(depx, bonded_distributor, locker, {'from': deployer})
+    early_incentives.setAddresses(depx, token, bonded_distributor, locker, {'from': deployer})
     depx.setAddresses(bonded_distributor, proxy, {'from': deployer})
     staker.setAddresses(token, depx, proxy, bonded_distributor, ddd_distributor, ddd_lp_staker, deposit_token, depx_pool, {'from': deployer})
     locker.setAddresses(token, {'from': deployer})

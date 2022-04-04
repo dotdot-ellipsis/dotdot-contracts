@@ -72,15 +72,17 @@ contract EpxDepositIncentives is Ownable {
 
     function setAddresses(
         ILockedEPX _dEPX,
+        IDddToken _DDD,
         IBondedFeeDistributor _bondedDistributor,
         ITokenLocker _dddLocker
     ) external onlyOwner {
         dEPX = _dEPX;
+        DDD = _DDD;
         bondedDistributor = _bondedDistributor;
         dddLocker = _dddLocker;
 
         EPX.approve(address(_dEPX), type(uint256).max);
-        DDD.approve(address(_dddLocker), type(uint256).max);
+        _DDD.approve(address(_dddLocker), type(uint256).max);
 
         renounceOwnership();
     }
