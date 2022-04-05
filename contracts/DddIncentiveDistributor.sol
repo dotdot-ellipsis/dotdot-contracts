@@ -61,12 +61,12 @@ contract DddIncentiveDistributor is Ownable {
 
     constructor(IIncentiveVoting _epsVoter) {
         epsVoter = _epsVoter;
+        startTime = _epsVoter.startTime();
     }
 
     function setAddresses(ITokenLocker _dddLocker, IDotDotVoting _dddVoter) external onlyOwner {
         dddLocker = _dddLocker;
         dddVoter = _dddVoter;
-        startTime = _dddVoter.startTime();
 
         renounceOwnership();
     }
@@ -80,7 +80,6 @@ contract DddIncentiveDistributor is Ownable {
     }
 
     function getWeek() public view returns (uint256) {
-        if (startTime == 0) return 0;
         return (block.timestamp - startTime) / 604800;
     }
 
