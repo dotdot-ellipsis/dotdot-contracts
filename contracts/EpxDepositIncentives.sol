@@ -92,21 +92,25 @@ contract EpxDepositIncentives is Ownable {
     }
 
     /**
-        @notice The maximum amount of EPX that may be deposited by `_user`
-        @dev Use `address(0)` as `_user` to query the depositable amount
+        @notice The maximum amount of EPX that may be deposited by `user`
+        @dev Use `address(0)` as `user` to query the depositable amount
              for a user that did not register legacy locked balances
+        @return total Maximum amount that this user may deposit, inclusive of the reserved amount
+        @return reserved Deposit amount which is reserved specifically for `user`
      */
-    function maxDepositAmount(address _user) external view returns (uint256) {
+    function maxDepositAmount(address user) external view returns (uint256 total, uint256 reserved) {
         uint256 week = getWeek();
         if (week == 0) {
             uint256 lockedSupply = epsV1Staker.lockedSupply() * EPS_MIGRATION_RATIO;
-            return depositCap - lockedSupply - receivedDeposits;
+            return (depositCap - lockedSupply - receivedDeposits, 0);
         } else {
-            // Note that if there are no calls to `deposit` or `updateReservedDeposits`
-            // for more than one week, this view method may become inaccurate
+            // subtract last week's total in case there was not a call to `updateReservedDeposits`
+            // this week. Note that if there have been no calls for more than one week, this
+            // view method will become inaccurate.
             uint256 totalReserved = reservedDeposits - totalWeeklyReservedDeposits[week - 1];
-            uint256 userReserved = userWeeklyReservedDeposits[msg.sender][week];
-            return depositCap - totalReserved - receivedDeposits + userReserved;
+
+            uint256 userReserved = userWeeklyReservedDeposits[user][week];
+            return (depositCap - totalReserved - receivedDeposits + userReserved, userReserved);
         }
     }
 
