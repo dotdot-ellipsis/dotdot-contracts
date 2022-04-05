@@ -2,8 +2,7 @@ from brownie import Contract, project, chain, ZERO_ADDRESS
 import pytest
 
 
-
-START_TIME = 0
+START_TIME = 1649289600
 MAX_LOCK_WEEKS = 16
 
 DDD_EARN_RATIO = 20
@@ -22,13 +21,12 @@ RECEIVERS = {
 }
 
 
-
 @pytest.fixture(autouse=True)
-def isolation_setup(fn_isolation):
-    pass
+def isolation_setup(dotdot_setup, fn_isolation):
+    chain.snapshot()
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="module")
 def ellipsis_setup(eps_voter, factory, epx, eps_locker, eps_staker, eps_fee_distro, token_3eps, token_abnb, eps_admin):
     eps_voter.setLpStaking(eps_staker, [token_3eps, token_abnb], {'from': eps_admin})
     factory.set_fee_receiver(eps_fee_distro, {'from': eps_admin})
@@ -39,8 +37,8 @@ def ellipsis_setup(eps_voter, factory, epx, eps_locker, eps_staker, eps_fee_dist
     chain.mine(timestamp=eps_locker.startTime())
 
 
-@pytest.fixture(scope="module", autouse=True)
-def dotdot_setup(DepositToken, bonded_distro, core_incentives, ddd_distro, ddd_lp_staker, ddd, voter, proxy, early_incentives, depx, staker, locker, ddd_pool, depx_pool, deployer):
+@pytest.fixture(scope="module")
+def dotdot_setup(ellipsis_setup, DepositToken, bonded_distro, core_incentives, ddd_distro, ddd_lp_staker, ddd, voter, proxy, early_incentives, depx, staker, locker, ddd_pool, depx_pool, deployer):
     ddd.setMinters([staker, early_incentives, core_incentives], {'from': deployer})
 
     bonded_distro.setAddresses(depx, ddd, staker, proxy, {'from': deployer})
@@ -66,6 +64,16 @@ def wbnb():
 @pytest.fixture(scope="session")
 def eps_admin(factory):
     return factory.admin()
+
+
+@pytest.fixture(scope="session")
+def locker1(accounts):
+    return accounts.at('0xb01ea75e8eed3a073b39567c8e9b2c392b273531', True)
+
+
+@pytest.fixture(scope="session")
+def locker2(accounts):
+    return accounts.at('0x5e2859ebd3ca946e5c4eb86dcc7b6501a2b52aba', True)
 
 
 @pytest.fixture(scope="session")
@@ -138,7 +146,7 @@ def epx():
 
 @pytest.fixture(scope="module")
 def eps_locker(Ellipsis, epx, epsv1_staker, eps_admin):
-    return Ellipsis.TokenLocker.deploy(epx, epsv1_staker, 1649289600, 52, 88, {'from': eps_admin})
+    return Ellipsis.TokenLocker.deploy(epx, epsv1_staker, START_TIME, 52, 88, {'from': eps_admin})
 
 
 @pytest.fixture(scope="module")
