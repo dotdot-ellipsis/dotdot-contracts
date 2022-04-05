@@ -459,9 +459,13 @@ contract BondedFeeDistributor is Ownable {
     function _extendBalanceArray(uint256[] storage balances) internal returns (uint256) {
         uint256 week = getWeek();
         uint256 length = balances.length;
-        uint256 value = balances[length - 1];
+        uint256 value = 0;
+        if (length > 0) {
+            value = balances[length - 1];
+        }
         while (length <= week) {
             balances.push(value);
+            length++;
         }
         return value;
     }
