@@ -61,3 +61,28 @@ def test_register_multiple(early_incentives, epsv1_staker, locker1, locker2):
 
     amount = epsv1_staker.lockedBalances(locker1)['locked'] + epsv1_staker.lockedBalances(locker2)['locked']
     assert early_incentives.reservedDeposits() == amount * 88
+
+
+def test_reserved_amounts(early_incentives, epsv1_staker, locker1, locker2):
+    early_incentives.registerLegacyLocks(locker1, {'from': locker1})
+    early_incentives.registerLegacyLocks(locker2, {'from': locker1})
+
+    user1_reserved = [early_incentives.userWeeklyReservedDeposits(locker1, i) for i in range(1, 13)][::-1]
+    user2_reserved = [early_incentives.userWeeklyReservedDeposits(locker2, i) for i in range(1, 13)][::-1]
+    total_reserved = [early_incentives.totalWeeklyReservedDeposits(i) for i in range(1, 13)][::-1]
+
+    expected = early_incentives.depositCap() - epsv1_staker.lockedSupply() * 88
+    assert early_incentives.maxDepositAmount(locker1) == (expected, 0)
+
+    for i in range(12):
+        chain.mine(timedelta=86400 * 7)
+        early_incentives.updateReservedDeposits({'from': locker1})
+        expected = early_incentives.depositCap() - sum(total_reserved)
+
+        reserved = user1_reserved.pop()
+        assert early_incentives.maxDepositAmount(locker1) == (expected + reserved, reserved)
+
+        reserved = user2_reserved.pop()
+        assert early_incentives.maxDepositAmount(locker2) == (expected + reserved, reserved)
+
+        total_reserved.pop()
