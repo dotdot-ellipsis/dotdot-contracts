@@ -16,6 +16,7 @@ contract LockedEPX is IERC20, Ownable {
 
     mapping(address => uint256) public override balanceOf;
     mapping(address => mapping(address => uint256)) public override allowance;
+    mapping(address => bool) public blockThirdPartyActions;
 
     IERC20 public immutable EPX;
     ITokenLocker public immutable epsLocker;
@@ -50,6 +51,10 @@ contract LockedEPX is IERC20, Ownable {
         proxy = _proxy;
 
         renounceOwnership();
+    }
+
+    function setBlockThirdPartyActions(bool _block) external {
+        blockThirdPartyActions[msg.sender] = _block;
     }
 
     function approve(address _spender, uint256 _value) external override returns (bool) {
@@ -110,6 +115,9 @@ contract LockedEPX is IERC20, Ownable {
         @return bool Success
      */
     function deposit(address _receiver, uint256 _amount, bool _bond) external returns (bool) {
+        if (msg.sender != _receiver) {
+            require(!blockThirdPartyActions[_receiver], "Cannot deposit on behalf of this account");
+        }
         extendLock();
         EPX.transferFrom(msg.sender, address(proxy), _amount);
         proxy.lock(_amount);
