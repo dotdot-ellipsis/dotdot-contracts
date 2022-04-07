@@ -258,6 +258,7 @@ contract BondedFeeDistributor is Ownable {
             dEPX.safeTransferFrom(msg.sender, address(this), _amount);
         }
 
+        tokenBalance[address(dEPX)] += _amount;
         uint256 balance = _extendBalanceArray(weeklyUserBalance[_user]);
         uint256 total = _extendBalanceArray(totalBalance);
 
@@ -332,6 +333,7 @@ contract BondedFeeDistributor is Ownable {
             } else {
                 stream.claimed = stream.claimed + amount;
             }
+            tokenBalance[address(dEPX)] -= amount;
             dEPX.safeTransfer(_receiver, amount);
         }
         return true;
@@ -351,7 +353,6 @@ contract BondedFeeDistributor is Ownable {
         uint256 week = getWeek();
         for (uint i = 0; i < _tokens.length; i++) {
             address token = _tokens[i];
-            require(token != address(dEPX), "Cannot distribute dEPX as a fee token");
             uint256 balance = tokenBalance[token];
             uint256 received = IERC20(token).balanceOf(address(this)) - balance;
             if (received > 0) {
