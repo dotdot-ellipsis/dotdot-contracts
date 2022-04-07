@@ -1,4 +1,5 @@
 from brownie import Contract, project, chain, ZERO_ADDRESS
+from brownie_tokens import ERC20
 import pytest
 
 
@@ -232,3 +233,22 @@ def ddd_pool(ddd, wbnb, deployer):
     pancake = Contract('0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73')
     pancake.createPair(ddd, wbnb, {'from': deployer})
     return pancake.getPair(ddd, wbnb)
+
+
+@pytest.fixture(scope="module")
+def fee1():
+    return ERC20()
+
+
+@pytest.fixture(scope="module")
+def fee2():
+    return ERC20()
+
+
+@pytest.fixture
+def advance_week():
+    def fn(weeks=1):
+        target = (chain[-1].timestamp // 604800 + weeks) * 604800
+        chain.mine(timestamp=target)
+
+    return fn
