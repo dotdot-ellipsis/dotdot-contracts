@@ -73,7 +73,7 @@ contract CoreMinter is Ownable {
         return amount - claimed[_user];
     }
 
-    function claim(address _receiver, uint _amount) external {
+    function claim(address _receiver, uint _amount, uint _lock_weeks) external {
         uint claimable = claimable(msg.sender);
         require(claimable > 0, "Nothing claimable");
         if (_amount == 0) {
@@ -81,9 +81,10 @@ contract CoreMinter is Ownable {
         } else {
             require(_amount <= claimable, "Exceeds claimable amount");
         }
+        require(_lock_weeks >= LOCK_WEEKS, "Must lock at least LOCK_WEEKS");
         claimed[msg.sender] += _amount;
         DDD.mint(address(this), _amount);
-        dddLocker.lock(_receiver, _amount, LOCK_WEEKS);
+        dddLocker.lock(_receiver, _amount, _lock_weeks);
     }
 
 }
