@@ -146,6 +146,15 @@ contract BondedFeeDistributor is Ownable {
     }
 
     /**
+        @notice The total amount of bonded tokens held in the contract
+     */
+    function bondedSupply() external view returns (uint256) {
+        uint256 length = totalBalance.length;
+        if (length == 0) return 0;
+        return totalBalance[length-1];
+    }
+
+    /**
         @notice The total amount of bonded tokens held in the contract for `_user`
         @dev Does not include any balance in an active unbonding stream
      */
