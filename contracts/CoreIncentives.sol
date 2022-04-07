@@ -18,8 +18,6 @@ contract CoreMinter is Ownable {
     uint256 public immutable MINT_PCT;
     uint256 public immutable MAX_DAILY_MINT;
     uint256 public immutable LOCK_WEEKS;
-
-
     uint256 public startTime;
 
     constructor(
@@ -82,7 +80,9 @@ contract CoreMinter is Ownable {
             require(_amount <= claimable, "Exceeds claimable amount");
         }
         require(_lock_weeks >= LOCK_WEEKS, "Must lock at least LOCK_WEEKS");
+
         claimed[msg.sender] += _amount;
+        minted += _amount;
         DDD.mint(address(this), _amount);
         dddLocker.lock(_receiver, _amount, _lock_weeks);
     }
