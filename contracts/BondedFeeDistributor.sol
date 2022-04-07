@@ -386,9 +386,10 @@ contract BondedFeeDistributor is Ownable {
         returns (uint256, StreamData memory)
     {
         uint256 claimableWeek = getWeek();
+        uint256 balanceLength = weeklyUserBalance[_user].length;
 
-        if (claimableWeek == 0) {
-            // the first full week hasn't completed yet
+        if (claimableWeek == 0 || balanceLength == 0) {
+            // the first full week hasn't completed yet or the user has never made a deposit
             return (0, StreamData({start: startTime, amount: 0, claimed: 0}));
         }
 
@@ -421,7 +422,6 @@ contract BondedFeeDistributor is Ownable {
         // iterate over weeks that have passed fully without any claims
         uint256 balance;
         uint256 total;
-        uint256 balanceLength = weeklyUserBalance[_user].length;
         uint256 totalLength = totalBalance.length;
         for (uint256 i = lastClaimWeek; i < claimableWeek; i++) {
             if (balanceLength > i) balance = weeklyUserBalance[_user][i];
