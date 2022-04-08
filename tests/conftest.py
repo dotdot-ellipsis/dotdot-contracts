@@ -245,7 +245,7 @@ def fee2():
     return ERC20()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def advance_week():
     def fn(weeks=1):
         target = (chain[-1].timestamp // 604800 + weeks) * 604800
