@@ -102,20 +102,22 @@ contract DddIncentiveDistributor is Ownable {
         external
         returns (bool)
     {
-        if (_amount > 0) {
-            if (!seenTokens[_lpToken][_incentive]) {
-                if (_lpToken != address(0)) {
-                    require(epsVoter.isApproved(_lpToken), "lpToken not approved for incentives");
-                }
+        if (!seenTokens[_lpToken][_incentive]) {
+            if (_lpToken != address(0)) {
+                require(epsVoter.isApproved(_lpToken), "lpToken not approved for incentives");
+            }
+            if (_amount > 0) {
                 seenTokens[_lpToken][_incentive] = true;
                 incentiveTokens[_lpToken].push(_incentive);
             }
+        }
+        if (_amount > 0) {
             uint256 received = IERC20(_incentive).balanceOf(address(this));
             IERC20(_incentive).safeTransferFrom(msg.sender, address(this), _amount);
             received = IERC20(_incentive).balanceOf(address(this)) - received;
             uint256 week = getWeek();
             weeklyIncentiveAmounts[_lpToken][_incentive][week] += received;
-            emit IncentiveReceived(msg.sender, _lpToken, _incentive, week, _amount);
+            emit IncentiveReceived(msg.sender, _lpToken, _incentive, week, received);
         }
         return true;
     }
