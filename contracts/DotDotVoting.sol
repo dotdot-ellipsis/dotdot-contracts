@@ -157,7 +157,7 @@ contract DotDotVoting is Ownable {
         if (!votingOpen()) return 0;
         uint256 week = getWeek();
         uint256 usedVotes = userVotes[_user][week];
-        uint256 totalVotes = dddLocker.userWeight(_user) / 1e18;
+        uint256 totalVotes = dddLocker.weeklyWeightOf(_user, week) / 1e18;
         return totalVotes - usedVotes;
     }
 
@@ -188,7 +188,7 @@ contract DotDotVoting is Ownable {
                 proxy.vote(fixedVoteToken, fixedVote);
                 epsVotes -= fixedVote[0];
             }
-            uint256 dddVotes = dddLocker.totalWeight() / 1e18;
+            uint256 dddVotes = dddLocker.weeklyTotalWeight(week) / 1e18;
             ratio = epsVotes / dddVotes;
             epsVoteRatio[week] = ratio;
         }
@@ -206,7 +206,7 @@ contract DotDotVoting is Ownable {
         }
 
         // make sure user has not exceeded available votes
-        uint256 totalVotes = dddLocker.userWeight(msg.sender) / 1e18;
+        uint256 totalVotes = dddLocker.weeklyWeightOf(msg.sender, week) / 1e18;
         require(usedVotes <= totalVotes, "Available votes exceeded");
         userVotes[msg.sender][week] = usedVotes;
 
