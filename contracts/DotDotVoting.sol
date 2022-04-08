@@ -223,6 +223,8 @@ contract DotDotVoting is Ownable {
     }
 
     function minWeightForNewTokenApprovalVote() public view returns (uint256) {
+        uint256 lockerWeek = epsLocker.getWeek();
+        if (lockerWeek == 0) return 0;
         uint256 epsVotes = epsLocker.weeklyWeightOf(address(proxy), epsLocker.getWeek() - 1);
         uint256 dddVotes = dddLocker.weeklyTotalWeight(getWeek() - 1) / 1e18;
         uint256 ratio = epsVotes / dddVotes;
@@ -242,9 +244,9 @@ contract DotDotVoting is Ownable {
         uint256 ratio = tokenApprovalVotes[_voteIndex].ratio;
         uint256 week = tokenApprovalVotes[_voteIndex].week;
         if (ratio == 0) {
-            week = getWeek() - 1;
             uint256 epsVotes = epsVoter.availableTokenApprovalVotes(address(proxy), _voteIndex);
             if (epsVotes == 0) return 0;
+            week = getWeek() - 1;
             uint256 dddVotes = dddLocker.weeklyTotalWeight(week) / 1e18;
             ratio = epsVotes / dddVotes;
         }
@@ -260,9 +262,9 @@ contract DotDotVoting is Ownable {
     function voteForTokenApproval(uint256 _voteIndex, uint256 _yesVotes) external {
         TokenApprovalVote storage vote = tokenApprovalVotes[_voteIndex];
         if (vote.ratio == 0) {
-            vote.week = getWeek() - 1;
             uint256 epsVotes = epsVoter.availableTokenApprovalVotes(address(proxy), _voteIndex);
             require(epsVotes > 0, "Vote has closed or does not exist");
+            vote.week = getWeek() - 1;
             uint256 dddVotes = dddLocker.weeklyTotalWeight(vote.week) / 1e18;
             vote.ratio = epsVotes / dddVotes;
         }
