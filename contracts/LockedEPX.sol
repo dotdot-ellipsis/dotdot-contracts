@@ -142,7 +142,7 @@ contract LockedEPX is IERC20, Ownable {
      */
     function extendLock() public returns (bool) {
         if (lastLockWeek < block.timestamp / WEEK) {
-            uint256[2][] memory locks = epsLocker.getActiveUserLocks(address(this));
+            uint256[2][] memory locks = epsLocker.getActiveUserLocks(address(proxy));
             for (uint i = 0; i < locks.length; i++) {
                 (uint256 week, uint256 amount) = (locks[i][0], locks[i][1]);
                 if (week < MAX_LOCK_WEEKS) proxy.extendLock(amount, week);
