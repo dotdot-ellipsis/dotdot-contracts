@@ -18,6 +18,8 @@ contract CoreMinter is Ownable {
     uint256 public immutable MINT_PCT;
     uint256 public immutable MAX_DAILY_MINT;
     uint256 public immutable LOCK_WEEKS;
+
+    // this contract has no concept of weekly periods
     uint256 public startTime;
 
     constructor(

@@ -19,8 +19,9 @@ contract EpxDepositIncentives is Ownable {
     IBondedFeeDistributor public bondedDistributor;
     ITokenLocker public dddLocker;
 
-    // timestamp when deposits are opened
+    // new weeks within this contract begin on Thursday 00:00:00 UTC
     uint256 public immutable startTime;
+
     // maximum amount of EPX that may be deposited via this contract
     uint256 public immutable depositCap;
     // amount of EPX that has already been deposited via this contract

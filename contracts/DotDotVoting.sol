@@ -38,6 +38,8 @@ contract DotDotVoting is Ownable {
     mapping (uint256 => TokenApprovalVote) tokenApprovalVotes;
 
     uint256 constant WEEK = 86400 * 7;
+
+    // new weeks within this contract begin on Thursday 00:00:00 UTC
     uint256 public startTime;
 
     IIncentiveVoting public immutable epsVoter;

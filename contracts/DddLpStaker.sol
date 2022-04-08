@@ -26,6 +26,8 @@ contract DddLpStaker is Ownable {
     uint256 public constant rewardsDuration = WEEK;
 
     uint256 public totalSupply;
+
+    // this contract has no concept of weekly periods
     uint256 public immutable startTime;
 
     IERC20 public stakingToken;

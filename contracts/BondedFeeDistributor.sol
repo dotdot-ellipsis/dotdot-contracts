@@ -78,6 +78,7 @@ contract BondedFeeDistributor is Ownable {
     address public lpDepositor;
     IEllipsisProxy public proxy;
 
+    // new weeks within this contract begin on Thursday 00:00:00 UTC
     uint256 public immutable startTime;
 
     uint256 constant WEEK = 86400 * 7;

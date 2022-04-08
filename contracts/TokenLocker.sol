@@ -41,6 +41,8 @@ contract TokenLocker is Ownable {
     mapping(address => bool) public blockThirdPartyActions;
 
     IERC20 public DDD;
+
+    // new weeks within this contract begin on Monday 00:00:00 UTC
     uint256 public immutable startTime;
 
     uint256 constant WEEK = 86400 * 7;
