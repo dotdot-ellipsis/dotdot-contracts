@@ -50,7 +50,6 @@ contract DotDotVoting is Ownable {
     IEllipsisProxy public proxy;
 
     mapping(address => bool) public isApproved;
-    address[] public approvedTokens;
 
     event VotedForIncentives(
         address indexed voter,
@@ -92,10 +91,6 @@ contract DotDotVoting is Ownable {
         renounceOwnership();
     }
 
-    function approvedTokensLength() external view returns (uint256) {
-        return approvedTokens.length;
-    }
-
     function votingOpen() public view returns (bool) {
         uint256 weekStart = block.timestamp / WEEK * WEEK;
         return block.timestamp - 86400 * 4 >= weekStart;
@@ -117,11 +112,11 @@ contract DotDotVoting is Ownable {
         @return _voteData Dynamic array of (token address, votes for token)
      */
     function getCurrentVotes() external view returns (uint256 _totalVotes, Vote[] memory _voteData) {
-        _voteData = new Vote[](approvedTokens.length);
+        _voteData = new Vote[](epsVoter.approvedTokensLength());
         uint256 week = getWeek();
         uint256 totalVotes;
         for (uint i = 0; i < _voteData.length; i++) {
-            address token = approvedTokens[i];
+            address token = epsVoter.approvedTokens(i);
             uint256 votes = tokenVotes[token][week];
             totalVotes += votes;
             _voteData[i] = Vote({token: token, votes: votes});
@@ -139,10 +134,10 @@ contract DotDotVoting is Ownable {
         view
         returns (uint256 _totalVotes, Vote[] memory _voteData)
     {
-        _voteData = new Vote[](approvedTokens.length);
+        _voteData = new Vote[](epsVoter.approvedTokensLength());
         uint256 week = getWeek();
         for (uint i = 0; i < _voteData.length; i++) {
-            address token = approvedTokens[i];
+            address token = epsVoter.approvedTokens(i);
             _voteData[i] = Vote({token: token, votes: userTokenVotes[_user][token][week]});
         }
         return (userVotes[_user][week], _voteData);
@@ -290,7 +285,7 @@ contract DotDotVoting is Ownable {
              token is already approved or the last vote was made less than 1
              week ago.
      */
-    function createdFixedVoteApprovalVote() external {
+    function createFixedVoteApprovalVote() external {
         uint256 voteId = proxy.createTokenApprovalVote(fixedVoteLpToken);
         proxy.voteForTokenApproval(voteId, type(uint256).max);
         emit CreatedTokenApprovalVote(msg.sender, voteId, fixedVoteLpToken);
