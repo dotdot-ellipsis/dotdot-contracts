@@ -232,6 +232,7 @@ contract DotDotVoting is Ownable {
         uint256 weight = dddLocker.weeklyWeightOf(msg.sender, getWeek() - 1);
         require(weight >= minWeightForNewTokenApprovalVote(), "User has insufficient DotDot lock weight");
         _voteIndex = proxy.createTokenApprovalVote(_token);
+        lastVote[msg.sender] = block.timestamp;
         emit CreatedTokenApprovalVote(msg.sender, _voteIndex, _token);
     }
 
@@ -273,7 +274,6 @@ contract DotDotVoting is Ownable {
         require(usedVotes <= totalVotes, "Exceeds available votes");
 
         userTokenApprovalVotes[_voteIndex][msg.sender] = usedVotes;
-        _yesVotes *= vote.ratio;
         proxy.voteForTokenApproval(_voteIndex, _yesVotes * vote.ratio);
         emit VotedForTokenApproval(msg.sender, _voteIndex, _yesVotes);
     }
