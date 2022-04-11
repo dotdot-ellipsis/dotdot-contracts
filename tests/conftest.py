@@ -133,6 +133,11 @@ def token_abnb():
     return Contract('0xf71A0bCC3Ef8a8c5a28fc1BC245e394A8ce124ec')
 
 
+@pytest.fixture(scope="session")
+def token_ust():
+    return Contract('0xD67625ad4104dA86c4D9CB054001E899B1b9061B')
+
+
 # Ellipsis v1 deployments
 
 @pytest.fixture(scope="session")
