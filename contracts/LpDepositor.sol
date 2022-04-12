@@ -214,11 +214,12 @@ contract LpDepositor is Ownable {
         _updateIntegrals(_user, _token, balance, total, reward);
 
         userBalances[_user][_token] = balance + _amount;
-        totalBalances[_token] += total + _amount;
+        totalBalances[_token] = total + _amount;
 
         address depositToken = depositTokens[_token];
         if (depositToken == address(0)) {
             depositToken = _deployDepositToken(_token);
+            depositTokens[_token] = depositToken;
         }
         IDepositToken(depositToken).mint(_user, _amount);
         emit Deposit(msg.sender, _user, _token, _amount);
