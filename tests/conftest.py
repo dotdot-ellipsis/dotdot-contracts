@@ -33,9 +33,6 @@ def ellipsis_setup(eps_voter, factory, epx, eps_locker, eps_staker, eps_fee_dist
     factory.set_fee_receiver(eps_fee_distro, {'from': eps_admin})
     epx.addMinter(eps_staker, {'from': epx.owner()})
     token_abnb.setDepositContract(eps_staker, True, {'from': eps_admin})
-    # NOTE fixtures are written with an assumption that the protocol launch is in the future
-    # once this is no longer true, tests will likely break until fixtures are updated
-    chain.mine(timestamp=epx.startTime())
 
 
 @pytest.fixture(scope="module")
@@ -142,7 +139,7 @@ def token_ust():
 
 @pytest.fixture(scope="session")
 def Ellipsis():
-    return project.load('ellipsis-finance/ellipsis-v2@1.0.0-rc1')
+    return project.load('ellipsis-finance/ellipsis-v2@1.0.0')
 
 
 @pytest.fixture(scope="session")

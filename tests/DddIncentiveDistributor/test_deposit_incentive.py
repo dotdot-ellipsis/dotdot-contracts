@@ -17,7 +17,7 @@ def test_deposit_incentive(fee1, deployer, ddd_distro):
     assert fee1.balanceOf(ddd_distro) == 10**18
     assert ddd_distro.incentiveTokensLength(ZERO_ADDRESS) == 1
     assert ddd_distro.incentiveTokens(ZERO_ADDRESS, 0) == fee1
-    assert ddd_distro.weeklyIncentiveAmounts(ZERO_ADDRESS, fee1, ddd_distro.getWeek()) == 10**18
+    assert ddd_distro.weeklyIncentiveAmounts(ZERO_ADDRESS, fee1, ddd_distro.getLockingWeek()) == 10**18
 
 
 def test_incentive_multiple_deposits(fee1, deployer, ddd_distro):
@@ -27,7 +27,7 @@ def test_incentive_multiple_deposits(fee1, deployer, ddd_distro):
     assert fee1.balanceOf(ddd_distro) == 6 * 10**18
     assert ddd_distro.incentiveTokensLength(ZERO_ADDRESS) == 1
     assert ddd_distro.incentiveTokens(ZERO_ADDRESS, 0) == fee1
-    assert ddd_distro.weeklyIncentiveAmounts(ZERO_ADDRESS, fee1, ddd_distro.getWeek()) == 6 * 10**18
+    assert ddd_distro.weeklyIncentiveAmounts(ZERO_ADDRESS, fee1, ddd_distro.getLockingWeek()) == 6 * 10**18
 
 
 def test_deposit_multiple_incentives(fee1, fee2, deployer, ddd_distro):
@@ -39,8 +39,8 @@ def test_deposit_multiple_incentives(fee1, fee2, deployer, ddd_distro):
     assert ddd_distro.incentiveTokensLength(ZERO_ADDRESS) == 2
     assert ddd_distro.incentiveTokens(ZERO_ADDRESS, 0) == fee1
     assert ddd_distro.incentiveTokens(ZERO_ADDRESS, 1) == fee2
-    assert ddd_distro.weeklyIncentiveAmounts(ZERO_ADDRESS, fee1, ddd_distro.getWeek()) == 10**18
-    assert ddd_distro.weeklyIncentiveAmounts(ZERO_ADDRESS, fee2, ddd_distro.getWeek()) == 2 * 10**18
+    assert ddd_distro.weeklyIncentiveAmounts(ZERO_ADDRESS, fee1, ddd_distro.getLockingWeek()) == 10**18
+    assert ddd_distro.weeklyIncentiveAmounts(ZERO_ADDRESS, fee2, ddd_distro.getLockingWeek()) == 2 * 10**18
 
 
 def test_deposit_bribe(fee1, deployer, ddd_distro, token_3eps):
@@ -50,7 +50,7 @@ def test_deposit_bribe(fee1, deployer, ddd_distro, token_3eps):
     assert ddd_distro.incentiveTokensLength(ZERO_ADDRESS) == 0
     assert ddd_distro.incentiveTokensLength(token_3eps) == 1
     assert ddd_distro.incentiveTokens(token_3eps, 0) == fee1
-    assert ddd_distro.weeklyIncentiveAmounts(token_3eps, fee1, ddd_distro.getWeek()) == 10**18
+    assert ddd_distro.weeklyIncentiveAmounts(token_3eps, fee1, ddd_distro.getVotingWeek()) == 10**18
 
 
 def test_bribe_multiple_deposits(fee1, deployer, ddd_distro, token_3eps):
@@ -61,11 +61,12 @@ def test_bribe_multiple_deposits(fee1, deployer, ddd_distro, token_3eps):
     assert ddd_distro.incentiveTokensLength(ZERO_ADDRESS) == 0
     assert ddd_distro.incentiveTokensLength(token_3eps) == 1
     assert ddd_distro.incentiveTokens(token_3eps, 0) == fee1
-    assert ddd_distro.weeklyIncentiveAmounts(token_3eps, fee1, ddd_distro.getWeek()) == 6 * 10**18
+    assert ddd_distro.weeklyIncentiveAmounts(token_3eps, fee1, ddd_distro.getVotingWeek()) == 6 * 10**18
 
 
 def test_deposit_multiple_weeks(fee1, fee2, deployer, ddd_distro, advance_week, token_3eps):
-    week = ddd_distro.getWeek()
+    advance_week()
+    week = ddd_distro.getVotingWeek()
     ddd_distro.depositIncentive(ZERO_ADDRESS, fee1, 10**18, {'from': deployer})
     ddd_distro.depositIncentive(ZERO_ADDRESS, fee2, 2 * 10**18, {'from': deployer})
     advance_week()

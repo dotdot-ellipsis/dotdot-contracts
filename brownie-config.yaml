@@ -1,5 +1,5 @@
 dependencies:
-  - ellipsis-finance/ellipsis-v2@1.0.0-rc1
+  - ellipsis-finance/ellipsis-v2@1.0.0
 
 autofetch_sources: true
 
