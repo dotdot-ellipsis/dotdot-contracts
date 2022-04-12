@@ -317,7 +317,6 @@ contract LpDepositor is Ownable {
         uint256 balance = userBalances[_from][_token];
         require(balance >= _amount, "Insufficient balance");
 
-
         uint256 reward = proxy.claimEmissions(_token);
         _updateIntegrals(_from, _token, balance, total, reward);
         userBalances[_from][_token] = balance - _amount;
@@ -327,6 +326,44 @@ contract LpDepositor is Ownable {
         userBalances[_to][_token] = balance + _amount;
         emit TransferDeposit(_token, _from, _to, _amount);
         return true;
+    }
+
+    /**
+        @notice Transfer accrued EPX and DDD fees to dEPX bonders, DDD lockers and DDD Lp Stakers
+        @dev Called once per day on normal interactions with the contract. With normal protocol
+             use it should not be a requirement to explicitly call this function.
+     */
+    function pushPendingProtocolFees() public {
+        lastBonderFeeTransfer = block.timestamp;
+        uint256 pendingEpx = pendingBonderEpx;
+        if (pendingEpx > 0) {
+            pendingBonderEpx = 0;
+
+            // mint DDD for dEPX bonders and DDD LPs
+            uint256 pendingDdd = pendingEpx / DDD_EARN_RATIO;
+            DDD.mint(address(bondedDistributor), pendingDdd);
+            uint256 pendingDddLp = pendingDdd * 100 / (100 - DDD_LP_PERCENT) - pendingDdd;
+            DDD.mint(address(dddLpStaker), pendingDddLp);
+
+            // transfer 2/3 of EPX to dEPX bonders
+            EPX.safeTransfer(address(bondedDistributor), pendingEpx / 3 * 2);
+
+            // notify bonded distributor and DDD Lp Staker
+            bondedDistributor.notifyFeeAmounts(pendingEpx / 3 * 2, pendingDdd);
+            dddLpStaker.notifyFeeAmount(pendingDddLp);
+
+            // 1/3 of EPX is converted to dEPX
+            pendingEpx /= 3;
+            dEPX.deposit(address(this), pendingEpx, false);
+            if (epsVoter.isApproved(fixedVoteLpToken)) {
+                // if `fixedVoteLpToken` is approved for emisisons, 1/2 of the
+                // dEPX is used as a bribe for votes on that pool
+                pendingEpx /= 2;
+                dddIncentiveDistributor.depositIncentive(fixedVoteLpToken, address(dEPX), pendingEpx);
+            }
+            // remaining dEPX is given to all DDD lockers
+            dddIncentiveDistributor.depositIncentive(address(0), address(dEPX), pendingEpx);
+        }
     }
 
     function _deployDepositToken(address pool) internal returns (address token) {
@@ -375,36 +412,7 @@ contract LpDepositor is Ownable {
             // once a day, transfer pending rewards to dEPX bonders and DDD lockers
             // we only do this on updates to pools without extra incentives because each
             // operation can be gas intensive
-            lastBonderFeeTransfer = block.timestamp;
-            uint256 pendingEpx = pendingBonderEpx;
-            if (pendingEpx > 0) {
-                pendingBonderEpx = 0;
-
-                // mint DDD for dEPX bonders and DDD LPs
-                uint256 pendingDdd = pendingEpx / DDD_EARN_RATIO;
-                DDD.mint(address(bondedDistributor), pendingDdd);
-                uint256 pendingDddLp = pendingDdd * 100 / (100 - DDD_LP_PERCENT) - pendingDdd;
-                DDD.mint(address(dddLpStaker), pendingDddLp);
-
-                // transfer 2/3 of EPX to dEPX bonders
-                EPX.safeTransfer(address(bondedDistributor), pendingEpx / 3 * 2);
-
-                // notify bonded distributor and DDD Lp Staker
-                bondedDistributor.notifyFeeAmounts(pendingEpx / 3 * 2, pendingDdd);
-                dddLpStaker.notifyFeeAmount(pendingDddLp);
-
-                // 1/3 of EPX is converted to dEPX
-                pendingEpx /= 3;
-                dEPX.deposit(address(this), pendingEpx, false);
-                if (epsVoter.isApproved(fixedVoteLpToken)) {
-                    // if `fixedVoteLpToken` is approved for emisisons, 1/2 of the
-                    // dEPX is used as a bribe for votes on that pool
-                    pendingEpx /= 2;
-                    dddIncentiveDistributor.depositIncentive(fixedVoteLpToken, address(dEPX), pendingEpx);
-                }
-                // remaining dEPX is given to all DDD lockers
-                dddIncentiveDistributor.depositIncentive(address(0), address(dEPX), pendingEpx);
-            }
+            pushPendingProtocolFees();
         }
     }
 
