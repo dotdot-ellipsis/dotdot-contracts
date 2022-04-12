@@ -228,6 +228,7 @@ contract LpDepositor is Ownable {
     function withdraw(address _receiver, address _token, uint256 _amount) external {
         uint256 balance = userBalances[msg.sender][_token];
         uint256 total = totalBalances[_token];
+        require(balance >= _amount, "Insufficient balance");
 
         userBalances[msg.sender][_token] = balance - _amount;
         totalBalances[_token] = total - _amount;
@@ -311,7 +312,6 @@ contract LpDepositor is Ownable {
 
     function transferDeposit(address _token, address _from, address _to, uint256 _amount) external returns (bool) {
         require(msg.sender == depositTokens[_token], "Unauthorized caller");
-        require(_amount > 0, "Cannot transfer zero");
 
         uint256 total = totalBalances[_token];
         uint256 balance = userBalances[_from][_token];
