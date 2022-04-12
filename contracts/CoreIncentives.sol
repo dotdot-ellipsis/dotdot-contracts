@@ -89,4 +89,17 @@ contract CoreMinter is Ownable {
         dddLocker.lock(_receiver, _amount, _lock_weeks);
     }
 
+    function transferAlloc(address _newOwner, uint256 _ap) external {
+        uint256 alloc = allocPoints[msg.sender];
+        require(alloc > 0, "No alloc");
+        require(_ap <= alloc, "Insufficient allocPoint");
+        uint256 amount = claimed[msg.sender] * _ap / alloc;
+
+        allocPoints[msg.sender] -= _ap;
+        claimed[msg.sender] -= amount;
+
+        allocPoints[_newOwner] += _ap;
+        claimed[_newOwner] += amount;
+    }
+
 }
