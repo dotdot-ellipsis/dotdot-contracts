@@ -49,8 +49,9 @@ contract LpDepositor is Ownable {
     // one-time mint amount of DDD sent to `dddLpStaker`
     uint256 public immutable DDD_LP_INITIAL_MINT;
 
-    uint256 public pendingBonderEpx;
-    uint256 public lastBonderFeeTransfer;
+    uint256 public pendingFeeEpx;
+    uint256 public pendingFeeDdd;
+    uint256 public lastFeeTransfer;
 
     // user -> pool -> deposit amount
     mapping(address => mapping(address => uint256)) public userBalances;
@@ -275,6 +276,7 @@ contract LpDepositor is Ownable {
         }
         if (claims.ddd > 0) {
             DDD.mint(_receiver, claims.ddd);
+            pendingFeeDdd += claims.ddd * 100 / (100 - DDD_LP_PERCENT) - claims.ddd;
         }
         emit Claimed(msg.sender, _receiver, _tokens, claims.epx, claims.ddd);
     }
@@ -335,35 +337,39 @@ contract LpDepositor is Ownable {
              use it should not be a requirement to explicitly call this function.
      */
     function pushPendingProtocolFees() public {
-        lastBonderFeeTransfer = block.timestamp;
-        uint256 pendingEpx = pendingBonderEpx;
-        if (pendingEpx > 0) {
-            pendingBonderEpx = 0;
+        lastFeeTransfer = block.timestamp;
 
-            // mint DDD for dEPX bonders and DDD LPs
-            uint256 pendingDdd = pendingEpx / DDD_EARN_RATIO;
+        uint256 pending = pendingFeeDdd;
+        if (pending > 0) {
+            // mint DDD for and DDD Lp Staker
+            pendingFeeDdd = 0;
+            DDD.mint(address(dddLpStaker), pending);
+            dddLpStaker.notifyFeeAmount(pending);
+        }
+
+        pending = pendingFeeEpx;
+        if (pending > 0) {
+            pendingFeeEpx = 0;
+
+            // mint DDD for dEPX bonders
+            uint256 pendingDdd = pending / DDD_EARN_RATIO;
             DDD.mint(address(bondedDistributor), pendingDdd);
-            uint256 pendingDddLp = pendingDdd * 100 / (100 - DDD_LP_PERCENT) - pendingDdd;
-            DDD.mint(address(dddLpStaker), pendingDddLp);
-
             // transfer 2/3 of EPX to dEPX bonders
-            EPX.safeTransfer(address(bondedDistributor), pendingEpx / 3 * 2);
-
-            // notify bonded distributor and DDD Lp Staker
-            bondedDistributor.notifyFeeAmounts(pendingEpx / 3 * 2, pendingDdd);
-            dddLpStaker.notifyFeeAmount(pendingDddLp);
+            EPX.safeTransfer(address(bondedDistributor), pending / 3 * 2);
+            // notify bonded distributor
+            bondedDistributor.notifyFeeAmounts(pending / 3 * 2, pendingDdd);
 
             // 1/3 of EPX is converted to dEPX
-            pendingEpx /= 3;
-            dEPX.deposit(address(this), pendingEpx, false);
+            pending /= 3;
+            dEPX.deposit(address(this), pending, false);
             if (epsVoter.isApproved(fixedVoteLpToken)) {
                 // if `fixedVoteLpToken` is approved for emisisons, 1/2 of the
                 // dEPX is used as a bribe for votes on that pool
-                pendingEpx /= 2;
-                dddIncentiveDistributor.depositIncentive(fixedVoteLpToken, address(dEPX), pendingEpx);
+                pending /= 2;
+                dddIncentiveDistributor.depositIncentive(fixedVoteLpToken, address(dEPX), pending);
             }
             // remaining dEPX is given to all DDD lockers
-            dddIncentiveDistributor.depositIncentive(address(0), address(dEPX), pendingEpx);
+            dddIncentiveDistributor.depositIncentive(address(0), address(dEPX), pending);
         }
     }
 
@@ -392,7 +398,7 @@ contract LpDepositor is Ownable {
         if (reward > 0) {
             uint256 fee = reward * 15 / 100;
             reward -= fee;
-            pendingBonderEpx += fee;
+            pendingFeeEpx += fee;
 
             integral.epx += 1e18 * reward / total;
             integral.ddd += 1e18 * (reward / DDD_EARN_RATIO) / total;
@@ -409,7 +415,7 @@ contract LpDepositor is Ownable {
         if (total > 0 && extraRewards[pool].length > 0) {
             // if this token receives 3rd-party incentives, claim and update integrals
             _updateExtraIntegrals(user, pool, balance, total);
-        } else if (lastBonderFeeTransfer + 86400 < block.timestamp) {
+        } else if (lastFeeTransfer + 86400 < block.timestamp) {
             // once a day, transfer pending rewards to dEPX bonders and DDD lockers
             // we only do this on updates to pools without extra incentives because each
             // operation can be gas intensive
