@@ -43,7 +43,8 @@ contract DddIncentiveDistributor is Ownable {
     // depending on the situation, this contract tracks weeks using
     // the periods from `TokenLocker` (starting Monday 00:00:00 UTC)
     // and `DotDotVoting` (starting Thursday 00:00:00 UTC)
-    uint256 immutable _startTime;
+    uint256 immutable public lockingStartTime;
+    uint256 immutable public votingStartTime;
 
     uint256 constant WEEK = 86400 * 7;
 
@@ -65,7 +66,9 @@ contract DddIncentiveDistributor is Ownable {
 
     constructor(IIncentiveVoting _epsVoter) {
         epsVoter = _epsVoter;
-        _startTime = _epsVoter.startTime();
+        uint256 start = _epsVoter.startTime();
+        votingStartTime = start;
+        lockingStartTime = start - 86400 * 3;
     }
 
     function setAddresses(ITokenLocker _dddLocker, IDotDotVoting _dddVoter) external onlyOwner {
@@ -83,28 +86,12 @@ contract DddIncentiveDistributor is Ownable {
         blockThirdPartyActions[msg.sender] = _block;
     }
 
-    /**
-        @notice Get the start time used for calculating weekly periods for `_lpToken`
-        @dev Incentives given to all DDD lockers are tracked via the same start time
-             used in `TokenLocker` (new week beginning at 00:00:00 UTC each Monday).
-             Incentives specific to LP votes are tracked via the start time used
-             in `DotDotVoting` (new week beginning 00:00:00 UTC each Thursday).
-     */
-    function startTime(address _lpToken) public view returns (uint256) {
-        uint256 start = _startTime;
-        if (_lpToken == address(0)) start -= 86400 * 3;
-        return start;
+    function getLockingWeek() public view returns (uint256) {
+        return (block.timestamp - lockingStartTime) / 604800;
     }
 
-    /**
-        @notice Get the current week for for `_lpToken`
-        @dev Incentives given to all DDD lockers are tracked via the same weekly periods
-             used in `TokenLocker` (new week beginning at 00:00:00 UTC each Monday).
-             Incentives specific to LP votes are tracked via the weekly periods used
-             in `DotDotVoting` (new week beginning 00:00:00 UTC each Thursday).
-     */
-    function getWeek(address _lpToken) public view returns (uint256) {
-        return (block.timestamp - startTime(_lpToken)) / 604800;
+    function getVotingWeek() public view returns (uint256) {
+        return (block.timestamp - votingStartTime) / 604800;
     }
 
     function incentiveTokensLength(address _lpToken) external view returns (uint) {
@@ -139,7 +126,7 @@ contract DddIncentiveDistributor is Ownable {
             uint256 received = IERC20(_incentive).balanceOf(address(this));
             IERC20(_incentive).safeTransferFrom(msg.sender, address(this), _amount);
             received = IERC20(_incentive).balanceOf(address(this)) - received;
-            uint256 week = getWeek(_lpToken);
+            uint256 week = _lpToken == address(0) ? getLockingWeek() : getVotingWeek();
             weeklyIncentiveAmounts[_lpToken][_incentive][week] += received;
             emit IncentiveReceived(msg.sender, _lpToken, _incentive, week, received);
         }
@@ -199,11 +186,12 @@ contract DddIncentiveDistributor is Ownable {
         view
         returns (uint256, StreamData memory)
     {
-        uint256 claimableWeek = getWeek(_lpToken);
+        uint256 claimableWeek = _lpToken == address(0) ? getLockingWeek() : getVotingWeek();
+        uint256 start = _lpToken == address(0) ? lockingStartTime : votingStartTime;
 
         if (claimableWeek == 0) {
             // the first full week hasn't completed yet
-            return (0, StreamData({start: startTime(_lpToken), amount: 0, claimed: 0}));
+            return (0, StreamData({start: start, amount: 0, claimed: 0}));
         }
 
         // the previous week is the claimable one
@@ -213,7 +201,7 @@ contract DddIncentiveDistributor is Ownable {
         if (stream.start == 0) {
             lastClaimWeek = 0;
         } else {
-            lastClaimWeek = (stream.start - startTime(_lpToken)) / WEEK;
+            lastClaimWeek = (stream.start - start) / WEEK;
         }
 
         uint256 amount;
@@ -251,7 +239,8 @@ contract DddIncentiveDistributor is Ownable {
         address _token,
         uint256 _week
     ) internal view returns (StreamData memory) {
-        uint256 start = startTime(_lpToken) + _week * WEEK;
+        uint256 start = _lpToken == address(0) ? lockingStartTime : votingStartTime;
+        start += _week * WEEK;
         (uint256 userWeight, uint256 totalWeight) = _getWeights(_user, _lpToken, _week);
         uint256 amount;
         uint256 claimed;
