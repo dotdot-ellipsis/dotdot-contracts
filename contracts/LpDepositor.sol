@@ -161,7 +161,7 @@ contract LpDepositor is Ownable {
 
     function claimable(address _user, address[] calldata _tokens) external view returns (Amounts[] memory) {
         Amounts[] memory pending = new Amounts[](_tokens.length);
-        uint256[] memory totalClaimable = lpStaker.claimableReward(_user, _tokens);
+        uint256[] memory totalClaimable = lpStaker.claimableReward(address(proxy), _tokens);
         for (uint i = 0; i < _tokens.length; i++) {
             address token = _tokens[i];
             pending[i] = unclaimedRewards[_user][token];
@@ -183,6 +183,7 @@ contract LpDepositor is Ownable {
                 pending[i].ddd += balance * (integral.ddd - integralFor.ddd) / 1e18;
             }
         }
+        return pending;
     }
 
     function claimableExtraRewards(address user, address pool) external view returns (ExtraReward[] memory) {
