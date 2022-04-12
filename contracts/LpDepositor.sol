@@ -53,27 +53,29 @@ contract LpDepositor is Ownable {
     uint256 public pendingFeeDdd;
     uint256 public lastFeeTransfer;
 
+    // pool -> DDD deposit token
+    mapping(address => address) public depositTokens;
+
     // user -> pool -> deposit amount
     mapping(address => mapping(address => uint256)) public userBalances;
     // pool -> total deposit amount
     mapping(address => uint256) public totalBalances;
+
     // pool -> integrals
-    mapping(address => Amounts) public rewardIntegral;
+    mapping(address => Amounts) rewardIntegral;
     // user -> pool -> integrals
-    mapping(address => mapping(address => Amounts)) public rewardIntegralFor;
+    mapping(address => mapping(address => Amounts)) rewardIntegralFor;
     // user -> pool -> claimable
     mapping(address => mapping(address => Amounts)) unclaimedRewards;
-    // pool -> DDD deposit token
-    mapping(address => address) public depositTokens;
 
     // pool -> third party rewards
     mapping(address => address[]) public extraRewards;
     // pool -> third party reward integrals
     mapping(address => uint256[]) extraRewardIntegral;
     // user -> pool -> third party reward integrals
-    mapping(address => mapping(address => uint256[])) public extraRewardIntegralFor;
+    mapping(address => mapping(address => uint256[])) extraRewardIntegralFor;
     // user -> pool -> unclaimed reward balances
-    mapping(address => mapping(address => uint256[])) public unclaimedExtraRewards;
+    mapping(address => mapping(address => uint256[])) unclaimedExtraRewards;
 
     event Deposit(
         address indexed caller,
@@ -158,6 +160,10 @@ contract LpDepositor is Ownable {
         _DDD.mint(address(dddLpStaker), DDD_LP_INITIAL_MINT);
 
         renounceOwnership();
+    }
+
+    function extraRewardsLength(address _pool) external view returns (uint256) {
+        return extraRewards[_pool].length;
     }
 
     function claimable(address _user, address[] calldata _tokens) external view returns (Amounts[] memory) {
