@@ -73,9 +73,9 @@ contract LpDepositor is Ownable {
     // pool -> third party reward integrals
     mapping(address => uint256[]) extraRewardIntegral;
     // user -> pool -> third party reward integrals
-    mapping(address => mapping(address => uint256[])) extraRewardIntegralFor;
+    mapping(address => mapping(address => mapping(uint256 => uint256))) extraRewardIntegralFor;
     // user -> pool -> unclaimed reward balances
-    mapping(address => mapping(address => uint256[])) unclaimedExtraRewards;
+    mapping(address => mapping(address => mapping(uint256 => uint256))) unclaimedExtraRewards;
 
     event Deposit(
         address indexed caller,
@@ -202,8 +202,8 @@ contract LpDepositor is Ownable {
             address token = extraRewards[pool][i];
             uint256 amount = unclaimedExtraRewards[user][pool][i];
             if (balance > 0) {
-                uint256 earned = IRewardsToken(token).earned(address(proxy), token);
-                uint256 integral = extraRewardIntegral[pool][i] + 1e18 * earned;
+                uint256 earned = IRewardsToken(pool).earned(address(proxy), token);
+                uint256 integral = extraRewardIntegral[pool][i] + 1e18 * earned / total;
                 uint256 integralFor = extraRewardIntegralFor[user][pool][i];
                 amount += balance * (integral - integralFor) / 1e18;
             }
@@ -294,7 +294,7 @@ contract LpDepositor is Ownable {
         uint256 total = totalBalances[pool];
         uint256 balance = userBalances[msg.sender][pool];
         if (total > 0) _updateExtraIntegrals(msg.sender, pool, balance, total);
-        uint256 length = extraRewards[msg.sender].length;
+        uint256 length = extraRewards[pool].length;
         for (uint i = 0; i < length; i++) {
             uint256 amount = unclaimedExtraRewards[msg.sender][pool][i];
             if (amount > 0) {
@@ -315,6 +315,7 @@ contract LpDepositor is Ownable {
         address[] storage rewards = extraRewards[pool];
         for (uint256 i = rewards.length; i < count; i ++) {
             rewards.push(IRewardsToken(pool).rewardTokens(i));
+            extraRewardIntegral[pool].push();
         }
         emit ExtraRewardsUpdated(pool, rewards);
     }
@@ -443,15 +444,15 @@ contract LpDepositor is Ownable {
         proxy.getReward(pool, rewards);
         for (uint i = 0; i < rewards.length; i++) {
             uint256 delta = IERC20(rewards[i]).balanceOf(address(this)) - balances[i];
-            uint256 integral;
+            uint256 integral = extraRewardIntegral[pool][i];
             if (delta > 0) {
-                integral = extraRewardIntegral[pool][i] + 1e18 * delta / total;
+                integral += 1e18 * delta / total;
                 extraRewardIntegral[pool][i] = integral;
             }
             uint256 integralFor = extraRewardIntegralFor[user][pool][i];
             if (integralFor < integral) {
                 unclaimedExtraRewards[user][pool][i] += balance * (integral - integralFor) / 1e18;
-                extraRewardIntegralFor[user][pool][i] = integralFor;
+                extraRewardIntegralFor[user][pool][i] = integral;
             }
         }
     }
