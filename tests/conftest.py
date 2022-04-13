@@ -1,4 +1,4 @@
-from brownie import Contract, project, chain, ZERO_ADDRESS
+from brownie import Contract, project, chain, ZERO_ADDRESS, interface
 from brownie_tokens import ERC20
 import pytest
 
@@ -42,7 +42,7 @@ def dotdot_setup(ellipsis_setup, DepositToken, bonded_distro, core_incentives, d
     bonded_distro.setAddresses(depx, ddd, staker, proxy, {'from': deployer})
     core_incentives.setAddresses(ddd, locker, {'from': deployer})
     ddd_distro.setAddresses(locker, voter, {'from': deployer})
-    ddd_lp_staker.setAddresses(ddd_pool, staker, ddd, {'from': deployer})
+    ddd_lp_staker.setAddresses(ddd_pool, ddd, staker, ddd, {'from': deployer})
     voter.setAddresses(locker, depx_pool, proxy, {'from': deployer})
     proxy.setAddresses(depx, staker, bonded_distro, voter, {'from': deployer})
     early_incentives.setAddresses(depx, ddd, bonded_distro, locker, {'from': deployer})
@@ -234,7 +234,8 @@ def depx_pool(factory, deployer, epx, depx):
 def ddd_pool(ddd, wbnb, deployer):
     pancake = Contract('0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73')
     pancake.createPair(ddd, wbnb, {'from': deployer})
-    return pancake.getPair(ddd, wbnb)
+    pair = pancake.getPair(ddd, wbnb)
+    return interface.IUniswapV2Pair(pair)
 
 
 @pytest.fixture(scope="module")

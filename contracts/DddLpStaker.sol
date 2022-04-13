@@ -50,11 +50,13 @@ contract DddLpStaker is Ownable {
 
     function setAddresses(
         IERC20 _stakingToken,
+        IERC20 _rewardToken,
         address _lpDepositor,
         address _treasury
     ) external onlyOwner {
         lpDepositor = _lpDepositor;
         stakingToken = _stakingToken;
+        rewardToken = _rewardToken;
         treasury = _treasury;
 
         renounceOwnership();
