@@ -10,6 +10,7 @@ DDD_EARN_RATIO = 20
 DDD_LOCK_MULTIPLIER = 3
 DDD_LP_PCT = 20
 DDD_LP_INITIAL_MINT = 2_500_000 * 10**18
+INITIAL_DEPOSIT_GRACE_PERIOD = 3600 * 6
 DDD_MINT_RATIO = 500
 EARLY_DEPOSIT_CAP = 25_000_000_000 * 10**18  # 25 billion, equivalent to 284m EPS
 
@@ -37,7 +38,7 @@ def ellipsis_setup(eps_voter, factory, epx, eps_locker, eps_staker, eps_fee_dist
 
 @pytest.fixture(scope="module")
 def dotdot_setup(ellipsis_setup, DepositToken, bonded_distro, core_incentives, ddd_distro, ddd_lp_staker, ddd, voter, proxy, early_incentives, depx, staker, locker, ddd_pool, depx_pool, deployer):
-    ddd.setMinters([staker, early_incentives, core_incentives], {'from': deployer})
+    ddd.setMinters([staker, early_incentives, core_incentives, ddd_lp_staker], {'from': deployer})
 
     bonded_distro.setAddresses(depx, ddd, staker, proxy, {'from': deployer})
     core_incentives.setAddresses(ddd, locker, {'from': deployer})
@@ -186,7 +187,7 @@ def ddd_distro(DddIncentiveDistributor, eps_voter, deployer):
 
 @pytest.fixture(scope="module")
 def ddd_lp_staker(DddLpStaker, deployer):
-    return DddLpStaker.deploy({'from': deployer})
+    return DddLpStaker.deploy(DDD_LP_INITIAL_MINT, INITIAL_DEPOSIT_GRACE_PERIOD, {'from': deployer})
 
 
 @pytest.fixture(scope="module")
@@ -216,7 +217,7 @@ def depx(LockedEPX, epx, eps_locker, deployer):
 
 @pytest.fixture(scope="module")
 def staker(LpDepositor, epx, eps_staker, eps_voter, deployer):
-    return LpDepositor.deploy(epx, eps_staker, eps_voter, DDD_EARN_RATIO, DDD_LOCK_MULTIPLIER, DDD_LP_PCT, DDD_LP_INITIAL_MINT, {'from': deployer})
+    return LpDepositor.deploy(epx, eps_staker, eps_voter, DDD_EARN_RATIO, DDD_LOCK_MULTIPLIER, DDD_LP_PCT, {'from': deployer})
 
 
 @pytest.fixture(scope="module")

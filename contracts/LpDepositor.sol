@@ -46,8 +46,6 @@ contract LpDepositor is Ownable {
     uint256 public immutable DDD_LOCK_MULTIPLIER;
     // % of DDD minted for `dddLpStaker` relative to the amount earned by LPs
     uint256 public immutable DDD_LP_PERCENT;
-    // one-time mint amount of DDD sent to `dddLpStaker`
-    uint256 public immutable DDD_LP_INITIAL_MINT;
 
     uint256 public pendingFeeEpx;
     uint256 public pendingFeeDdd;
@@ -123,8 +121,7 @@ contract LpDepositor is Ownable {
         IIncentiveVoting _epsVoter,
         uint256 _dddEarnRatio,
         uint256 _dddLockMultiplier,
-        uint256 _dddLpPercent,
-        uint256 _dddInitialMint
+        uint256 _dddLpPercent
     ) {
         EPX = _EPX;
         lpStaker = _lpStaker;
@@ -132,7 +129,6 @@ contract LpDepositor is Ownable {
         DDD_EARN_RATIO = _dddEarnRatio;
         DDD_LOCK_MULTIPLIER = _dddLockMultiplier;
         DDD_LP_PERCENT = _dddLpPercent;
-        DDD_LP_INITIAL_MINT = _dddInitialMint;
     }
 
     function setAddresses(
@@ -157,7 +153,6 @@ contract LpDepositor is Ownable {
 
         EPX.approve(address(_dEPX), type(uint256).max);
         _dEPX.approve(address(_dddIncentiveDistributor), type(uint256).max);
-        _DDD.mint(address(dddLpStaker), DDD_LP_INITIAL_MINT);
 
         renounceOwnership();
     }

@@ -2,6 +2,7 @@ pragma solidity 0.8.12;
 
 import "./dependencies/Ownable.sol";
 import "./interfaces/IERC20.sol";
+import "./interfaces/dotdot/IDddToken.sol";
 
 
 contract DddLpStaker is Ownable {
@@ -28,10 +29,17 @@ contract DddLpStaker is Ownable {
     uint256 public totalSupply;
 
     // this contract has no concept of weekly periods
-    uint256 public immutable startTime;
+    uint256 public startTime;
+
+    // amount of DDD minted as initial incentives
+    uint256 public immutable INITIAL_DDD_MINT_AMOUNT;
+    // seconds between the first deposit and minting the initial DDD incentives
+    uint256 public immutable INITIAL_DEPOSIT_GRACE_PERIOD;
+
+    bool public initialMintCompleted;
 
     IERC20 public stakingToken;
-    IERC20 public rewardToken;
+    IDddToken public rewardToken;
     address public lpDepositor;
     address public treasury;
 
@@ -44,13 +52,14 @@ contract DddLpStaker is Ownable {
     event Withdrawn(address indexed user, address indexed receiver, uint256 withdrawAmount, uint256 feeAmount);
     event FeeClaimed(address indexed user, address indexed receiver, uint256 reward);
 
-    constructor() {
-        startTime = block.timestamp;
+    constructor(uint256 _initialAmount, uint256 _gracePeriod) {
+        INITIAL_DDD_MINT_AMOUNT = _initialAmount;
+        INITIAL_DEPOSIT_GRACE_PERIOD = _gracePeriod;
     }
 
     function setAddresses(
         IERC20 _stakingToken,
-        IERC20 _rewardToken,
+        IDddToken _rewardToken,
         address _lpDepositor,
         address _treasury
     ) external onlyOwner {
@@ -103,7 +112,9 @@ contract DddLpStaker is Ownable {
              every 8 weeks until reaching 0
      */
     function depositFee() public view returns (uint256) {
-        uint256 timeSinceStart = block.timestamp - startTime;
+        uint256 start = startTime;
+        if (start == 0) return 200;
+        uint256 timeSinceStart = block.timestamp - start;
         if (timeSinceStart >= WEEK * 8 * 8) return 0;
         return 200 - (timeSinceStart / (WEEK * 8) * 25);
     }
@@ -162,6 +173,20 @@ contract DddLpStaker is Ownable {
     function deposit(address receiver, uint256 amount, bool claim) external {
         if (claim) require (msg.sender == receiver, "Cannot trigger claim for another user");
         require(amount > 0, "Cannot stake 0");
+
+        if (!initialMintCompleted) {
+            uint256 start = startTime;
+            if (start == 0) {
+                // the first deposit sets the start time
+                startTime = block.timestamp;
+            } else if (block.timestamp - INITIAL_DEPOSIT_GRACE_PERIOD > start) {
+                // first deposit after grace period triggers the initial incentive mint
+                initialMintCompleted = true;
+                rewardToken.mint(address(this), INITIAL_DDD_MINT_AMOUNT);
+                _notifyFeeAmount(INITIAL_DDD_MINT_AMOUNT);
+            }
+        }
+
         _updateReward(receiver, receiver, claim);
         stakingToken.transferFrom(msg.sender, address(this), amount);
 
@@ -254,6 +279,11 @@ contract DddLpStaker is Ownable {
 
     function notifyFeeAmount(uint256 amount) external returns (bool) {
         require(msg.sender == lpDepositor);
+        _notifyFeeAmount(amount);
+        return true;
+    }
+
+    function _notifyFeeAmount(uint256 amount) internal {
         rewardPerTokenStored = rewardPerToken();
 
         if (block.timestamp >= periodFinish) {
@@ -266,8 +296,6 @@ contract DddLpStaker is Ownable {
         lastUpdateTime = block.timestamp;
         periodFinish = block.timestamp + rewardsDuration;
         emit FeeAdded(amount);
-
-        return true;
     }
 
     function _updateReward(address account, address receiver, bool claim) internal {
