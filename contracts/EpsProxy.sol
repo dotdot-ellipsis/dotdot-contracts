@@ -14,6 +14,8 @@ import "./interfaces/ellipsis/IRewardsToken.sol";
 contract EllipsisProxy is Ownable {
     using SafeERC20 for IERC20;
 
+    address public emergencyAdmin;
+
     IERC20 public immutable EPX;
     ITokenLocker public immutable epsLocker;
     IEllipsisLpStaking public immutable lpStaker;
@@ -26,6 +28,12 @@ contract EllipsisProxy is Ownable {
     address public dddVoter;
     address public bailoutImplementation;
 
+    address public pendingdEPX;
+    address public pendingLpDepositor;
+    address public pendingBondedDistributor;
+    address public pendingDddVoter;
+    uint256 public newAddressDeadline;
+
     uint256 immutable MAX_LOCK_WEEKS;
 
     // Lp Depositor -> LP token -> emergency bailout deployment
@@ -33,10 +41,27 @@ contract EllipsisProxy is Ownable {
 
     mapping(address => bool) isApproved;
 
+    event NewAddressesCommited(
+        address dEPX,
+        address lpDepositor,
+        address bondedDistributor,
+        address dddVoter,
+        uint256 deadline
+    );
+    event SetAddresses(
+        address dEPX,
+        address lpDepositor,
+        address bondedDistributor,
+        address dddVoter
+    );
     event EmergencyBailoutInitiated(
         address token,
         address lpDepositor,
         address bailout
+    );
+    event SetEmergencyAdmin(
+        address caller,
+        address emergencyAdmin
     );
 
     constructor(
@@ -44,7 +69,8 @@ contract EllipsisProxy is Ownable {
         ITokenLocker _epsLocker,
         IEllipsisLpStaking _lpStaker,
         IFeeDistributor _feeDistributor,
-        IIncentiveVoting _voter
+        IIncentiveVoting _voter,
+        address _emergencyAdmin
     ) {
         EPX = _EPX;
         epsLocker = _epsLocker;
@@ -58,6 +84,14 @@ contract EllipsisProxy is Ownable {
 
         MAX_LOCK_WEEKS = _epsLocker.MAX_LOCK_WEEKS();
         EPX.approve(address(_epsLocker), type(uint256).max);
+
+        transferEmergencyAdmin(_emergencyAdmin);
+    }
+
+    function transferEmergencyAdmin(address _newAdmin) public {
+        require(msg.sender == owner || msg.sender == emergencyAdmin);
+        emergencyAdmin = _newAdmin;
+        emit SetEmergencyAdmin(msg.sender, _newAdmin);
     }
 
     function setAddresses(
@@ -76,6 +110,54 @@ contract EllipsisProxy is Ownable {
 
         lpStaker.setClaimReceiver(address(lpDepositor));
         epsFeeDistributor.setClaimReceiver(address(bondedDistributor));
+
+        emit SetAddresses(_dEPX, _lpDepositor, _bondedDistributor, _dddVoter);
+    }
+
+    /**
+        @notice Modify core protocol addresses
+        @dev This will brick the existing deployment, it is only intended to be used in case
+             of an emergency requiring a complete migration of the protocol. As an additional
+             safety mechanism, there is a 7 day delay required between setting and applying
+             the new addresses.
+     */
+    function setPendingAddresses(
+        address _dEPX,
+        address _lpDepositor,
+        address _bondedDistributor,
+        address _dddVoter
+    ) external onlyOwner {
+        pendingdEPX = _dEPX;
+        pendingLpDepositor = _lpDepositor;
+        pendingBondedDistributor = _bondedDistributor;
+        pendingDddVoter = _dddVoter;
+        newAddressDeadline = block.timestamp + 86400 * 7;
+
+        emit NewAddressesCommited(_dEPX, _lpDepositor, _bondedDistributor, _dddVoter, newAddressDeadline);
+    }
+
+    function applyPendingAddresses() external onlyOwner {
+        require(newAddressDeadline != 0 && newAddressDeadline < block.timestamp);
+        dEPX = pendingdEPX;
+        lpDepositor = pendingLpDepositor;
+        bondedDistributor = pendingBondedDistributor;
+        dddVoter = pendingDddVoter;
+
+        lpStaker.setClaimReceiver(address(lpDepositor));
+        epsFeeDistributor.setClaimReceiver(address(bondedDistributor));
+
+        emit SetAddresses(dEPX, lpDepositor, bondedDistributor, dddVoter);
+        rejectPendingAddresses();
+    }
+
+    function rejectPendingAddresses() public onlyOwner {
+        pendingdEPX = address(0);
+        pendingLpDepositor = address(0);
+        pendingBondedDistributor = address(0);
+        pendingDddVoter = address(0);
+        newAddressDeadline = 0;
+
+        emit NewAddressesCommited(address(0), address(0), address(0), address(0), 0);
     }
 
     // TokenLocker
@@ -177,7 +259,8 @@ contract EllipsisProxy is Ownable {
                 to `_token` will revert after calling this function and there is no undo, so
                 this should only be done in an emergency situation.
      */
-    function emergencyWithdraw(address _token) external onlyOwner {
+    function emergencyWithdraw(address _token) external {
+        require(msg.sender == emergencyAdmin);
         require(emergencyBailout[lpDepositor][_token] == address(0), "Already initiated");
 
         bytes20 targetBytes = bytes20(bailoutImplementation);
