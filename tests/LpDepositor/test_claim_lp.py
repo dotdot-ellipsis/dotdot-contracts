@@ -18,9 +18,6 @@ def setup(dotdot_setup, token_3eps, token_abnb, alice, bob, staker, early_incent
     token_3eps.approve(staker, 2**256-1, {'from': alice})
     token_abnb.approve(staker, 2**256-1, {'from': alice})
 
-    # staker.deposit(alice, token_3eps, 4 * 10**18, {'from': alice})
-    # staker.deposit(bob, token_3eps, 5 * 10**18, {'from': alice})
-
 
 def test_claim(staker, alice, token_3eps, advance_week, epx, ddd):
     advance_week()
@@ -34,7 +31,7 @@ def test_claim(staker, alice, token_3eps, advance_week, epx, ddd):
     assert 0.9999 <= expected[0] / received <= 1
     assert 0.9999 <= expected[1] / ddd.balanceOf(alice) <= 1
 
-    pending = staker.pendingBonderEpx()
+    pending = staker.pendingFeeEpx()
     assert epx.balanceOf(staker) == pending
     assert pending / (pending + received) == 0.15
     assert ddd.balanceOf(alice) == received // staker.DDD_EARN_RATIO()
@@ -44,7 +41,7 @@ def test_claim(staker, alice, token_3eps, advance_week, epx, ddd):
 def test_claim_multiple_actions(staker, alice, token_3eps, advance_week, epx, ddd):
     advance_week()
 
-    # the total duration is less than 1 day so that `pendingBonderEpx` is not pushed
+    # the total duration is less than 1 day so that `pendingFeeEpx` is not pushed
     staker.deposit(alice, token_3eps, 4 * 10**18, {'from': alice})
     chain.mine(timedelta=3600)
     staker.withdraw(alice, token_3eps, 3 * 10**18, {'from': alice})
@@ -59,7 +56,8 @@ def test_claim_multiple_actions(staker, alice, token_3eps, advance_week, epx, dd
     assert 0.9999 <= expected[0] / received <= 1
     assert 0.9999 <= expected[1] / ddd.balanceOf(alice) <= 1
 
-    pending = staker.pendingBonderEpx()
+    assert staker.pendingFeeDdd() / (ddd.balanceOf(alice) + staker.pendingFeeDdd()) == staker.DDD_LP_PERCENT() / 100
+    pending = staker.pendingFeeEpx()
     assert epx.balanceOf(staker) == pending
     assert pending / (pending + received) == 0.15
     assert ddd.balanceOf(alice) == received // staker.DDD_EARN_RATIO()
