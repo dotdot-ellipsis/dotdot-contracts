@@ -43,4 +43,6 @@ interface IEllipsisLpStaking {
 
     function claim(address _user, address[] calldata _tokens) external returns (uint256);
 
+    function emergencyWithdraw(address _token) external;
+
 }

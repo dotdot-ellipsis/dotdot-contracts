@@ -3,6 +3,7 @@ pragma solidity 0.8.12;
 import "./dependencies/Ownable.sol";
 import "./dependencies/SafeERC20.sol";
 import "./interfaces/IERC20.sol";
+import "./interfaces/dotdot/IEmergencyBailout.sol";
 import "./interfaces/ellipsis/IFeeDistributor.sol";
 import "./interfaces/ellipsis/ILpStaker.sol";
 import "./interfaces/ellipsis/IIncentiveVoting.sol";
@@ -23,10 +24,20 @@ contract EllipsisProxy is Ownable {
     address public lpDepositor;
     address public bondedDistributor;
     address public dddVoter;
+    address public bailoutImplementation;
 
     uint256 immutable MAX_LOCK_WEEKS;
 
+    // Lp Depositor -> LP token -> emergency bailout deployment
+    mapping(address => mapping(address => address)) public emergencyBailout;
+
     mapping(address => bool) isApproved;
+
+    event EmergencyBailoutInitiated(
+        address token,
+        address lpDepositor,
+        address bailout
+    );
 
     constructor(
         IERC20 _EPX,
@@ -53,17 +64,18 @@ contract EllipsisProxy is Ownable {
         address _dEPX,
         address _lpDepositor,
         address _bondedDistributor,
-        address _dddVoter
+        address _dddVoter,
+        address _bailout
     ) external onlyOwner {
+        require(address(dEPX) == address(0), "Already set");
         dEPX = _dEPX;
         lpDepositor = _lpDepositor;
         bondedDistributor = _bondedDistributor;
         dddVoter = _dddVoter;
+        bailoutImplementation = _bailout;
 
         lpStaker.setClaimReceiver(address(lpDepositor));
         epsFeeDistributor.setClaimReceiver(address(bondedDistributor));
-
-        renounceOwnership();
     }
 
     // TokenLocker
@@ -96,6 +108,7 @@ contract EllipsisProxy is Ownable {
 
     function deposit(address _token, uint256 _amount) external returns (uint256) {
         require(msg.sender == lpDepositor);
+        require(emergencyBailout[msg.sender][_token] == address(0), "Emergency bailout");
         if (!isApproved[_token]) {
             IERC20(_token).safeApprove(address(lpStaker), type(uint256).max);
             isApproved[_token] = true;
@@ -105,6 +118,7 @@ contract EllipsisProxy is Ownable {
 
     function withdraw(address _receiver, address _token, uint256 _amount) external returns (uint256) {
         require(msg.sender == lpDepositor);
+        require(emergencyBailout[msg.sender][_token] == address(0), "Emergency bailout");
         uint256 reward = lpStaker.withdraw(_token, _amount, true);
         IERC20(_token).transfer(_receiver, _amount);
         return reward;
@@ -112,6 +126,7 @@ contract EllipsisProxy is Ownable {
 
     function claimEmissions(address _token) external returns (uint256) {
         require(msg.sender == lpDepositor);
+        require(emergencyBailout[msg.sender][_token] == address(0), "Emergency bailout");
         address[] memory tokens = new address[](1);
         tokens[0] = _token;
         return lpStaker.claim(address(this), tokens);
@@ -154,6 +169,36 @@ contract EllipsisProxy is Ownable {
         require(msg.sender == dddVoter);
         epsVoter.voteForTokenApproval(_voteIndex, _yesVotes);
         return true;
+    }
+
+    /**
+        @notice Triggers an emergency withdrawal for `_token`, deploys a bailout contract and
+                transfers the balance to that contract. Interactions with `LpDepositor` related
+                to `_token` will revert after calling this function and there is no undo, so
+                this should only be done in an emergency situation.
+     */
+    function emergencyWithdraw(address _token) external onlyOwner {
+        require(emergencyBailout[lpDepositor][_token] == address(0), "Already initiated");
+
+        bytes20 targetBytes = bytes20(bailoutImplementation);
+        address bailout;
+        assembly {
+            let clone := mload(0x40)
+            mstore(clone, 0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000000000000000000000)
+            mstore(add(clone, 0x14), targetBytes)
+            mstore(add(clone, 0x28), 0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000)
+            bailout := create(0, clone, 0x37)
+        }
+        emergencyBailout[lpDepositor][_token] = bailout;
+
+        IEmergencyBailout(bailout).initialize(_token, lpDepositor);
+        lpStaker.emergencyWithdraw(_token);
+
+        uint256 amount = IERC20(_token).balanceOf(address(this));
+        require(amount > 0, "Bailout on empty pool");
+
+        IERC20(_token).safeTransfer(bailout, amount);
+        emit EmergencyBailoutInitiated(_token, bailout, lpDepositor);
     }
 
 }
