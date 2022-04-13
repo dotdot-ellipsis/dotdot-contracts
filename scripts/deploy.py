@@ -21,6 +21,7 @@ DDD_EARN_RATIO = 20
 DDD_LOCK_MULTIPLIER = 3
 DDD_LP_PCT = 20
 DDD_LP_INITIAL_MINT = 2_500_000
+INITIAL_DEPOSIT_GRACE_PERIOD = 3600 * 6
 DDD_MINT_RATIO = 500
 EARLY_DEPOSIT_CAP = 25_000_000_000 * 10**18  # 25 billion, equivalent to 284m EPS
 
@@ -51,14 +52,14 @@ def main():
 
     bonded_distributor = BondedFeeDistributor.deploy(EPX_TOKEN, EPS_FEE_DISTRIBUTOR, {'from': deployer})
     ddd_distributor = DddIncentiveDistributor.deploy(EPS_VOTER, {'from': deployer})
-    ddd_lp_staker = DddLpStaker.deploy({'from': deployer})
+    ddd_lp_staker = DddLpStaker.deploy(DDD_LP_INITIAL_MINT, INITIAL_DEPOSIT_GRACE_PERIOD, {'from': deployer})
     token = DotDot.deploy({'from': deployer})
     deposit_token = DepositToken.deploy({'from': deployer})
     voter = DotDotVoting.deploy(EPS_VOTER, EPS_LOCKER, {'from': deployer})
     proxy = EllipsisProxy.deploy(EPX_TOKEN, EPS_LOCKER, EPS_LP_STAKER, EPS_FEE_DISTRIBUTOR, EPS_VOTER, {'from': deployer})
     early_incentives = EpxDepositIncentives.deploy(EPX_TOKEN, EPS_V1_STAKER, EARLY_DEPOSIT_CAP, DDD_MINT_RATIO, START_TIME, {'from': deployer})
     depx = LockedEPX.deploy(EPX_TOKEN, EPS_LOCKER, {'from': deployer})
-    staker = LpDepositor.deploy(EPX_TOKEN, EPS_LP_STAKER, EPS_VOTER, DDD_EARN_RATIO, DDD_LOCK_MULTIPLIER, DDD_LP_PCT, DDD_LP_INITIAL_MINT, {'from': deployer})
+    staker = LpDepositor.deploy(EPX_TOKEN, EPS_LP_STAKER, EPS_VOTER, DDD_EARN_RATIO, DDD_LOCK_MULTIPLIER, DDD_LP_PCT, {'from': deployer})
     locker = TokenLocker.deploy(EPS_LOCKER, MAX_LOCK_WEEKS, {'from': deployer})
 
     receivers = list(RECEIVERS)
@@ -76,12 +77,12 @@ def main():
     ddd_pool = factory.getPair(token, WBNB)
     assert ddd_pool != ZERO_ADDRESS
 
-    token.setMinters([staker, early_incentives, core_minter], {'from': deployer})
+    token.setMinters([staker, early_incentives, core_minter, ddd_lp_staker], {'from': deployer})
 
     bonded_distributor.setAddresses(depx, token, staker, proxy, {'from': deployer})
     core_minter.setAddresses(token, locker, {'from': deployer})
     ddd_distributor.setAddresses(locker, voter, {'from': deployer})
-    ddd_lp_staker.setAddresses(ddd_pool, staker, token, {'from': deployer})
+    ddd_lp_staker.setAddresses(ddd_pool, token, staker, token, {'from': deployer})
     voter.setAddresses(locker, depx_pool, proxy, {'from': deployer})
     proxy.setAddresses(depx, staker, bonded_distributor, voter, {'from': deployer})
     early_incentives.setAddresses(depx, token, bonded_distributor, locker, {'from': deployer})
