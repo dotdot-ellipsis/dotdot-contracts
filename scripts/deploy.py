@@ -8,6 +8,7 @@ from brownie import (
     DepositToken,
     DotDotVoting,
     EllipsisProxy,
+    EmergencyBailout,
     EpxDepositIncentives,
     LockedEPX,
     LpDepositor,
@@ -56,7 +57,8 @@ def main():
     token = DotDot.deploy({'from': deployer})
     deposit_token = DepositToken.deploy({'from': deployer})
     voter = DotDotVoting.deploy(EPS_VOTER, EPS_LOCKER, {'from': deployer})
-    proxy = EllipsisProxy.deploy(EPX_TOKEN, EPS_LOCKER, EPS_LP_STAKER, EPS_FEE_DISTRIBUTOR, EPS_VOTER, {'from': deployer})
+    proxy = EllipsisProxy.deploy(EPX_TOKEN, EPS_LOCKER, EPS_LP_STAKER, EPS_FEE_DISTRIBUTOR, EPS_VOTER, deployer, {'from': deployer})
+    bailout = EmergencyBailout.deploy({'from': deployer})
     early_incentives = EpxDepositIncentives.deploy(EPX_TOKEN, EPS_V1_STAKER, EARLY_DEPOSIT_CAP, DDD_MINT_RATIO, START_TIME, {'from': deployer})
     depx = LockedEPX.deploy(EPX_TOKEN, EPS_LOCKER, {'from': deployer})
     staker = LpDepositor.deploy(EPX_TOKEN, EPS_LP_STAKER, EPS_VOTER, DDD_EARN_RATIO, DDD_LOCK_MULTIPLIER, DDD_LP_PCT, {'from': deployer})
@@ -84,7 +86,7 @@ def main():
     ddd_distributor.setAddresses(locker, voter, {'from': deployer})
     ddd_lp_staker.setAddresses(ddd_pool, token, staker, token, {'from': deployer})
     voter.setAddresses(locker, depx_pool, proxy, {'from': deployer})
-    proxy.setAddresses(depx, staker, bonded_distributor, voter, {'from': deployer})
+    proxy.setAddresses(depx, staker, bonded_distributor, voter, bailout, {'from': deployer})
     early_incentives.setAddresses(depx, token, bonded_distributor, locker, {'from': deployer})
     depx.setAddresses(bonded_distributor, proxy, {'from': deployer})
     staker.setAddresses(token, depx, proxy, bonded_distributor, ddd_distributor, ddd_lp_staker, deposit_token, depx_pool, {'from': deployer})
