@@ -37,7 +37,7 @@ def ellipsis_setup(eps_voter, factory, epx, eps_locker, eps_staker, eps_fee_dist
 
 
 @pytest.fixture(scope="module")
-def dotdot_setup(ellipsis_setup, DepositToken, bonded_distro, core_incentives, ddd_distro, ddd_lp_staker, ddd, voter, proxy, early_incentives, depx, staker, locker, ddd_pool, depx_pool, deployer):
+def dotdot_setup(ellipsis_setup, EmergencyBailout, DepositToken, bonded_distro, core_incentives, ddd_distro, ddd_lp_staker, ddd, voter, proxy, early_incentives, depx, staker, locker, ddd_pool, depx_pool, deployer):
     ddd.setMinters([staker, early_incentives, core_incentives, ddd_lp_staker], {'from': deployer})
 
     bonded_distro.setAddresses(depx, ddd, staker, proxy, {'from': deployer})
@@ -45,7 +45,9 @@ def dotdot_setup(ellipsis_setup, DepositToken, bonded_distro, core_incentives, d
     ddd_distro.setAddresses(locker, voter, {'from': deployer})
     ddd_lp_staker.setAddresses(ddd_pool, ddd, staker, ddd, {'from': deployer})
     voter.setAddresses(locker, depx_pool, proxy, {'from': deployer})
-    proxy.setAddresses(depx, staker, bonded_distro, voter, {'from': deployer})
+
+    bailout = EmergencyBailout.deploy({'from': deployer})
+    proxy.setAddresses(depx, staker, bonded_distro, voter, bailout, {'from': deployer})
     early_incentives.setAddresses(depx, ddd, bonded_distro, locker, {'from': deployer})
     depx.setAddresses(bonded_distro, proxy, {'from': deployer})
     deposit_token = DepositToken.deploy({'from': deployer})
@@ -202,7 +204,7 @@ def voter(DotDotVoting, eps_voter, eps_locker, deployer):
 
 @pytest.fixture(scope="module")
 def proxy(EllipsisProxy, epx, eps_locker, eps_staker, eps_fee_distro, eps_voter, deployer):
-    return EllipsisProxy.deploy(epx, eps_locker, eps_staker, eps_fee_distro, eps_voter, {'from': deployer})
+    return EllipsisProxy.deploy(epx, eps_locker, eps_staker, eps_fee_distro, eps_voter, deployer, {'from': deployer})
 
 
 @pytest.fixture(scope="module")

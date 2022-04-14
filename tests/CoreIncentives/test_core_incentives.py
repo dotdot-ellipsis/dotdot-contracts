@@ -1,5 +1,11 @@
 import brownie
 from brownie import chain
+import pytest
+
+
+@pytest.fixture(scope="module", autouse=True)
+def setup(dotdot_setup, ddd, staker, deployer):
+    ddd.mint(deployer, 2500000 * 10**18, {'from': staker})
 
 
 def test_max_mintable_time(core_incentives):
