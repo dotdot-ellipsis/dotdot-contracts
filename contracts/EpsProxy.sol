@@ -281,7 +281,7 @@ contract EllipsisProxy is Ownable {
         require(amount > 0, "Bailout on empty pool");
 
         IERC20(_token).safeTransfer(bailout, amount);
-        emit EmergencyBailoutInitiated(_token, bailout, lpDepositor);
+        emit EmergencyBailoutInitiated(_token, lpDepositor, bailout);
     }
 
 }
