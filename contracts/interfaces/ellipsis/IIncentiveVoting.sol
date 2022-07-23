@@ -2,6 +2,14 @@ pragma solidity 0.8.12;
 
 interface IIncentiveVoting {
 
+    struct TokenApprovalVote {
+        address token;
+        uint40 startTime;
+        uint16 week;
+        uint256 requiredVotes;
+        uint256 givenVotes;
+    }
+
     function NEW_TOKEN_APPROVAL_VOTE_MIN_WEIGHT() external view returns (uint256);
     function startTime() external view returns (uint256);
     function availableVotes(address _user) external view returns (uint256);
@@ -9,6 +17,8 @@ interface IIncentiveVoting {
     function isApproved(address _token) external view returns (bool);
     function approvedTokensLength() external view returns (uint256);
     function approvedTokens(uint256) external view returns (address);
+    function tokenApprovalVotes(uint256) external view returns (TokenApprovalVote memory);
+    function userTokenApprovalVotes(uint256 _voteIndex, address _user) external view returns (uint256);
 
     /**
         @notice Allocate votes toward LP tokens to receive emissions in the following week
