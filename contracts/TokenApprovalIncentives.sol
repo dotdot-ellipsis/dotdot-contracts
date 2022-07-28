@@ -33,6 +33,8 @@ contract TokenApprovalIncentives {
     mapping(uint256 => mapping(IERC20 => mapping(address => uint256))) public userClaims;
     // vote ID -> incentive -> total claimed
     mapping(uint256 => mapping(IERC20 => uint256)) public totalClaims;
+    // vote ID -> list of incentive tokens
+    mapping(uint256 => IERC20[]) incentives;
 
     event IncentiveAdded(
         uint256 indexed voteId,
@@ -66,6 +68,11 @@ contract TokenApprovalIncentives {
         uint256 ratio
     );
 
+    struct IncentiveData {
+        IERC20 token;
+        uint256 amount;
+    }
+
     constructor(
         ITokenLocker _epsLocker,
         IIncentiveVoting _epsVoter,
@@ -82,7 +89,17 @@ contract TokenApprovalIncentives {
         startTime = _dddVoter.startTime();
     }
 
+    function getIncentives(uint256 _voteId) external view returns (IncentiveData[] memory) {
+        IncentiveData[] memory data = new IncentiveData[](incentives[_voteId].length);
+        for (uint256 i = 0; i < data.length; i++) {
+            IERC20 token = incentives[_voteId][i];
+            data[i] = IncentiveData({token: token, amount: totalDeposits[_voteId][token]});
+        }
+        return data;
+    }
+
     function addIncentive(uint256 _voteId, IERC20 _reward, uint256 _amount) external {
+        require(_amount > 0, "Cannot add zero");
         IIncentiveVoting.TokenApprovalVote memory vote = epsVoter.tokenApprovalVotes(_voteId);
         require(vote.startTime > block.timestamp - WEEK, "Vote has ended");
         require(vote.givenVotes < vote.requiredVotes, "Vote has already passed");
@@ -100,7 +117,11 @@ contract TokenApprovalIncentives {
         amount = _reward.balanceOf(address(this)) - amount;
 
         userDeposits[_voteId][_reward][msg.sender] += amount;
-        totalDeposits[_voteId][_reward] += amount;
+        uint256 deposits = totalDeposits[_voteId][_reward];
+        totalDeposits[_voteId][_reward] = deposits + amount;
+        if (deposits == 0) {
+            incentives[_voteId].push(_reward);
+        }
         emit IncentiveAdded(_voteId, msg.sender, _reward, amount);
     }
 
