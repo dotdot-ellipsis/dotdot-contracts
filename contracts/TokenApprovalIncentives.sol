@@ -100,26 +100,26 @@ contract TokenApprovalIncentives {
 
     function claimableIncentives(uint256 _voteId, address _user) external view returns (IncentiveData[] memory) {
         IncentiveData[] memory data = new IncentiveData[](incentives[_voteId].length);
-        uint256 votes = dddVoter.userTokenApprovalVotes(_voteId, msg.sender);
+        uint256 votes = dddVoter.userTokenApprovalVotes(_voteId, _user);
 
-        if (votes > 0) {
-            for (uint256 i = 0; i < data.length; i++) {
-                IERC20 token = incentives[_voteId][i];
+        for (uint256 i = 0; i < data.length; i++) {
+            IERC20 token = incentives[_voteId][i];
+            data[i].token = token;
 
-                uint256 deposits = totalDeposits[_voteId][token];
-                uint256 ratio = claimRatio[_voteId][token];
-                if (ratio == 0) {
-                    IIncentiveVoting.TokenApprovalVote memory vote = epsVoter.tokenApprovalVotes(_voteId);
-                    if (vote.givenVotes < vote.requiredVotes) continue;
-                    uint256 totalVotes = epsVoter.userTokenApprovalVotes(_voteId, proxy) / voteRatio[_voteId];
-                    ratio = deposits / totalVotes;
-                }
+            uint256 deposits = totalDeposits[_voteId][token];
+            uint256 ratio = claimRatio[_voteId][token];
+            if (ratio == 0) {
+                IIncentiveVoting.TokenApprovalVote memory vote = epsVoter.tokenApprovalVotes(_voteId);
+                if (vote.givenVotes < vote.requiredVotes) continue;
+                uint256 totalVotes = epsVoter.userTokenApprovalVotes(_voteId, proxy) / voteRatio[_voteId];
+                ratio = deposits / totalVotes;
+            }
 
+            if (userClaims[_voteId][token][_user] == 0) {
                 uint256 amount = votes * ratio;
                 uint256 claims = totalClaims[_voteId][token];
                 if (claims + amount > deposits) amount = deposits - claims;
-
-                data[i] = IncentiveData({token: token, amount: amount});
+                data[i].amount = amount;
             }
         }
 
