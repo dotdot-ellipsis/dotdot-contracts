@@ -126,7 +126,6 @@ contract TokenApprovalIncentives {
         return data;
     }
 
-
     function addIncentive(uint256 _voteId, IERC20 _reward, uint256 _amount) external {
         require(_amount > 0, "Cannot add zero");
         IIncentiveVoting.TokenApprovalVote memory vote = epsVoter.tokenApprovalVotes(_voteId);
@@ -186,8 +185,8 @@ contract TokenApprovalIncentives {
 
     function withdrawIncentive(uint256 _voteId, IERC20 _reward) external {
         IIncentiveVoting.TokenApprovalVote memory vote = epsVoter.tokenApprovalVotes(_voteId);
-        require(vote.startTime < block.timestamp - WEEK, "Vote has not ended");
         require(vote.givenVotes < vote.requiredVotes, "Vote was successful");
+        require(vote.startTime < block.timestamp - WEEK, "Vote has not ended");
         uint256 amount = userDeposits[_voteId][_reward][msg.sender];
         require(amount > 0, "Nothing to withdraw");
 
