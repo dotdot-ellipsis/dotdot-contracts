@@ -98,6 +98,35 @@ contract TokenApprovalIncentives {
         return data;
     }
 
+    function claimableIncentives(uint256 _voteId, address _user) external view returns (IncentiveData[] memory) {
+        IncentiveData[] memory data = new IncentiveData[](incentives[_voteId].length);
+        uint256 votes = dddVoter.userTokenApprovalVotes(_voteId, msg.sender);
+
+        if (votes > 0) {
+            for (uint256 i = 0; i < data.length; i++) {
+                IERC20 token = incentives[_voteId][i];
+
+                uint256 deposits = totalDeposits[_voteId][token];
+                uint256 ratio = claimRatio[_voteId][token];
+                if (ratio == 0) {
+                    IIncentiveVoting.TokenApprovalVote memory vote = epsVoter.tokenApprovalVotes(_voteId);
+                    if (vote.givenVotes < vote.requiredVotes) continue;
+                    uint256 totalVotes = epsVoter.userTokenApprovalVotes(_voteId, proxy) / voteRatio[_voteId];
+                    ratio = deposits / totalVotes;
+                }
+
+                uint256 amount = votes * ratio;
+                uint256 claims = totalClaims[_voteId][token];
+                if (claims + amount > deposits) amount = deposits - claims;
+
+                data[i] = IncentiveData({token: token, amount: amount});
+            }
+        }
+
+        return data;
+    }
+
+
     function addIncentive(uint256 _voteId, IERC20 _reward, uint256 _amount) external {
         require(_amount > 0, "Cannot add zero");
         IIncentiveVoting.TokenApprovalVote memory vote = epsVoter.tokenApprovalVotes(_voteId);
@@ -150,7 +179,7 @@ contract TokenApprovalIncentives {
         else if (claims + amount > deposits) amount = deposits - claims;
 
         userClaims[_voteId][_reward][msg.sender] = amount;
-        totalClaims[_voteId][_reward] += amount;
+        totalClaims[_voteId][_reward] = claims + amount;
         _reward.safeTransfer(msg.sender, amount);
         emit IncentiveClaimed(_voteId, msg.sender, _reward, amount);
     }
